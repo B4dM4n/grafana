@@ -90,6 +90,7 @@ export const sectionFields: Section = {
         'roleAttributeStrict',
         'orgMapping',
         'orgAttributePath',
+        'orgRoleAttributePath',
         'allowAssignGrafanaAdmin',
         'skipOrgRoleSync',
       ],
@@ -222,6 +223,7 @@ export const sectionFields: Section = {
         'roleAttributeStrict',
         'orgMapping',
         'orgAttributePath',
+        'orgRoleAttributePath',
         'allowAssignGrafanaAdmin',
         'skipOrgRoleSync',
       ],
@@ -472,6 +474,12 @@ export function fieldMap(provider: string): Record<string, FieldData> {
     orgAttributePath: {
       label: 'Organization attribute path',
       description: 'JMESPath expression to use for organization lookup.',
+      type: 'text',
+      hidden: !['generic_oauth', 'okta'].includes(provider),
+    },
+    orgRoleAttributePath: {
+      label: 'Organization-Role mapping attribute path',
+      description: 'JMESPath expression to use for organization role lookup.',
       type: 'text',
       hidden: !['generic_oauth', 'okta'].includes(provider),
     },

@@ -76,6 +76,7 @@ type OAuthInfo struct {
 	RoleAttributePath       string            `mapstructure:"role_attribute_path" toml:"role_attribute_path"`
 	RoleAttributeStrict     bool              `mapstructure:"role_attribute_strict" toml:"role_attribute_strict"`
 	OrgAttributePath        string            `mapstructure:"org_attribute_path"`
+	OrgRoleAttributePath    string            `mapstructure:"org_role_attribute_path"`
 	OrgMapping              []string          `mapstructure:"org_mapping"`
 	Scopes                  []string          `mapstructure:"scopes" toml:"scopes"`
 	SignoutRedirectUrl      string            `mapstructure:"signout_redirect_url" toml:"signout_redirect_url"`

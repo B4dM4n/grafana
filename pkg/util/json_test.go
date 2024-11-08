@@ -83,6 +83,72 @@ func TestSearchJSONForGroups(t *testing.T) {
 	}
 }
 
+func TestSearchJSONForOrgRoles(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		Name                 string
+		searchObject         any
+		OrgRoleAttributePath string
+		ExpectedResult       map[string]string
+		ExpectedError        error
+	}{
+		{
+			Name:                 "Given an invalid user info JSON response",
+			searchObject:         []byte("{"),
+			OrgRoleAttributePath: "attributes.org_roles",
+			ExpectedResult:       map[string]string{},
+			ExpectedError:        util.ErrFailedToUnmarshalJSON,
+		},
+		{
+			Name:                 "Given an empty user info JSON response and empty JMES path",
+			searchObject:         []byte{},
+			OrgRoleAttributePath: "",
+			ExpectedResult:       map[string]string{},
+			ExpectedError:        util.ErrNoAttributePathSpecified,
+		},
+		{
+			Name:                 "Given an empty user info JSON response and valid JMES path",
+			searchObject:         []byte{},
+			OrgRoleAttributePath: "attributes.org_roles",
+			ExpectedResult:       map[string]string{},
+			ExpectedError:        util.ErrEmptyJSON,
+		},
+		{
+			Name:                 "Given a nil JSON and valid JMES path",
+			searchObject:         []byte{},
+			OrgRoleAttributePath: "attributes.org_roles",
+			ExpectedResult:       map[string]string{},
+			ExpectedError:        util.ErrEmptyJSON,
+		}, {
+			Name: "Given a simple user info JSON response and valid JMES path",
+			searchObject: []byte(`{
+		"attributes": {
+			"org_roles": {
+				"org": "role"
+			}
+		}
+}`),
+			OrgRoleAttributePath: "attributes.org_roles",
+			ExpectedResult:       map[string]string{"org": "role"},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.Name, func(t *testing.T) {
+			t.Parallel()
+			actualResult, err := util.SearchJSONForStringMapAttr(
+				test.OrgRoleAttributePath, test.searchObject)
+			if test.ExpectedError == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, test.ExpectedError)
+			}
+			require.Equal(t, test.ExpectedResult, actualResult)
+		})
+	}
+}
+
 func TestSearchJSONForEmail(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
