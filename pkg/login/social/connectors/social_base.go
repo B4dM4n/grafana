@@ -179,6 +179,14 @@ func (s *SocialBase) extractOrgs(rawJSON []byte) ([]string, error) {
 	return util.SearchJSONForStringSliceAttr(s.info.OrgAttributePath, rawJSON)
 }
 
+func (s *SocialBase) extractOrgRoless(rawJSON []byte) (map[string]string, error) {
+	if s.info.OrgRoleAttributePath == "" {
+		return map[string]string{}, nil
+	}
+
+	return util.SearchJSONForStringMapAttr(s.info.OrgRoleAttributePath, rawJSON)
+}
+
 func (s *SocialBase) isGroupMember(groups []string) bool {
 	if len(s.info.AllowedGroups) == 0 {
 		return true
@@ -267,5 +275,6 @@ func validateInfo(info *social.OAuthInfo, oldInfo *social.OAuthInfo, requester i
 		validation.AllowAssignGrafanaAdminValidator(info, oldInfo, requester),
 		validation.SkipOrgRoleSyncAllowAssignGrafanaAdminValidator,
 		validation.OrgAttributePathValidator(info, oldInfo, requester),
+		validation.OrgRoleAttributePathValidator(info, oldInfo, requester),
 		validation.OrgMappingValidator(info, oldInfo, requester))
 }

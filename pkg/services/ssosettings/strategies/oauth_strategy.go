@@ -107,6 +107,7 @@ func (s *OAuthStrategy) loadSettingsForProvider(provider string) map[string]any 
 		"signout_redirect_url":          section.Key("signout_redirect_url").Value(),
 		"org_mapping":                   section.Key("org_mapping").Value(),
 		"org_attribute_path":            section.Key("org_attribute_path").Value(),
+		"org_role_attribute_path":       section.Key("org_role_attribute_path").Value(),
 	}
 
 	extraKeys := extraKeysByProvider[provider]

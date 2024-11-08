@@ -14,6 +14,7 @@ import (
 	"github.com/grafana/grafana/pkg/apimachinery/identity"
 	"github.com/grafana/grafana/pkg/login/social"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
+	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/ssosettings"
 	ssoModels "github.com/grafana/grafana/pkg/services/ssosettings/models"
 	"github.com/grafana/grafana/pkg/services/ssosettings/validation"
@@ -236,6 +237,7 @@ func (s *SocialGenericOAuth) UserInfo(ctx context.Context, client *http.Client, 
 
 	userInfo := &social.BasicUserInfo{}
 	var externalOrgs []string
+	var externalOrgRoles map[string]string
 	for _, data := range toCheck {
 		s.log.Debug("Processing external user info", "source", data.source, "data", data)
 
@@ -279,6 +281,15 @@ func (s *SocialGenericOAuth) UserInfo(ctx context.Context, client *http.Client, 
 			}
 		}
 
+		if len(externalOrgRoles) == 0 && !s.info.SkipOrgRoleSync {
+			var err error
+			externalOrgRoles, err = s.extractOrgRoless(data.rawJSON)
+			if err != nil {
+				s.log.Warn("Failed to extract org roles", "err", err)
+				return nil, err
+			}
+		}
+
 		if len(userInfo.Groups) == 0 {
 			groups, err := s.extractGroups(data)
 			if err != nil {
@@ -292,6 +303,22 @@ func (s *SocialGenericOAuth) UserInfo(ctx context.Context, client *http.Client, 
 
 	if !s.info.SkipOrgRoleSync {
 		userInfo.OrgRoles = s.orgRoleMapper.MapOrgRoles(s.orgMappingCfg, externalOrgs, userInfo.Role)
+
+		for o, r := range externalOrgRoles {
+			roleType := org.RoleType(r)
+			if !roleType.IsValid() {
+				continue
+			}
+			orgId, err := s.orgRoleMapper.getOrgIDForInternalMapping(ctx, o)
+			if err != nil {
+				continue
+			}
+			if userInfo.OrgRoles == nil {
+				userInfo.OrgRoles = map[int64]org.RoleType{}
+			}
+			userInfo.OrgRoles[int64(orgId)] = getTopRole(userInfo.OrgRoles[int64(orgId)], roleType)
+		}
+
 		if s.info.RoleAttributeStrict && len(userInfo.OrgRoles) == 0 {
 			// If no roles are found and role_attribute_strict is set, return an error.
 			// The s.info.RoleAttributeStrict is necessary, because there is a case when len(userInfo.OrgRoles) == 0,

@@ -40,6 +40,7 @@ export type SSOProviderSettingsBase = {
   signoutRedirectUrl?: string;
   skipOrgRoleSync?: boolean;
   orgAttributePath?: string;
+  orgRoleAttributePath?: string;
   teamIdsAttributePath?: string;
   teamsUrl?: string;
   tlsClientCa?: string;

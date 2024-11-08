@@ -53,6 +53,30 @@ func SearchJSONForStringSliceAttr(attributePath string, data any) ([]string, err
 	return result, nil
 }
 
+// SearchJSONForStringMapAttr searches for a map attribute in a JSON object and returns a string map.
+// The attributePath parameter is a string that specifies the path to the attribute.
+// The data parameter is the JSON object that we're searching. It can be a byte slice or a go type.
+func SearchJSONForStringMapAttr(attributePath string, data any) (map[string]string, error) {
+	val, err := searchJSONForAttr(attributePath, data)
+	if err != nil {
+		return map[string]string{}, err
+	}
+
+	ifMap, ok := val.(map[string]any)
+	if !ok {
+		return map[string]string{}, nil
+	}
+
+	result := make(map[string]string)
+	for k, v := range ifMap {
+		if strVal, ok := v.(string); ok {
+			result[k] = strVal
+		}
+	}
+
+	return result, nil
+}
+
 // SearchJSONForStringAttr searches for a specific attribute in a JSON object and returns a string.
 // The attributePath parameter is a string that specifies the path to the attribute.
 // The data parameter is the JSON object that we're searching. It can be a byte slice or a go type.

@@ -41,6 +41,16 @@ func OrgAttributePathValidator(info *social.OAuthInfo, oldInfo *social.OAuthInfo
 	}
 }
 
+func OrgRoleAttributePathValidator(info *social.OAuthInfo, oldInfo *social.OAuthInfo, requester identity.Requester) ssosettings.ValidateFunc[social.OAuthInfo] {
+	return func(info *social.OAuthInfo, requester identity.Requester) error {
+		hasChanged := info.OrgRoleAttributePath != oldInfo.OrgRoleAttributePath
+		if hasChanged && !requester.GetIsGrafanaAdmin() {
+			return ssosettings.ErrInvalidOAuthConfig("Organization role attribute path can only be updated by Grafana Server Admins.")
+		}
+		return nil
+	}
+}
+
 func SkipOrgRoleSyncAllowAssignGrafanaAdminValidator(info *social.OAuthInfo, requester identity.Requester) error {
 	if info.AllowAssignGrafanaAdmin && info.SkipOrgRoleSync {
 		return ssosettings.ErrInvalidOAuthConfig("Allow assign Grafana Admin and Skip org role sync are both set thus Grafana Admin role will not be synced. Consider setting one or the other.")

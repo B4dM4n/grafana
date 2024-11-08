@@ -13,6 +13,7 @@ import (
 	"github.com/grafana/grafana/pkg/apimachinery/identity"
 	"github.com/grafana/grafana/pkg/login/social"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
+	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/ssosettings"
 	ssoModels "github.com/grafana/grafana/pkg/services/ssosettings/models"
 	"github.com/grafana/grafana/pkg/services/ssosettings/validation"
@@ -168,6 +169,25 @@ func (s *SocialOkta) UserInfo(ctx context.Context, client *http.Client, token *o
 		}
 
 		userInfo.OrgRoles = s.orgRoleMapper.MapOrgRoles(s.orgMappingCfg, externalOrgs, directlyMappedRole)
+
+		externalOrgRoles, err := s.extractOrgRoless(data.rawJSON)
+		if err != nil {
+			s.log.Warn("Failed to extract org roles", "err", err)
+			return nil, err
+		}
+
+		for o, r := range externalOrgRoles {
+			roleType := org.RoleType(r)
+			if !roleType.IsValid() {
+				continue
+			}
+			orgId, err := s.orgRoleMapper.getOrgIDForInternalMapping(ctx, o)
+			if err != nil {
+				continue
+			}
+			userInfo.OrgRoles[int64(orgId)] = getTopRole(userInfo.OrgRoles[int64(orgId)], roleType)
+		}
+
 		if s.info.RoleAttributeStrict && len(userInfo.OrgRoles) == 0 {
 			return nil, errRoleAttributeStrictViolation.Errorf("could not evaluate any valid roles using IdP provided data")
 		}

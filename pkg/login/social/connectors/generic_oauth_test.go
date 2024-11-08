@@ -35,6 +35,7 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 		RoleAttributePath       string
 		RoleAttributeStrict     bool
 		OrgAttributePath        string
+		OrgRoleAttributePath    string
 		OrgMapping              []string
 		ExpectedEmail           string
 		ExpectedOrgRoles        map[int64]org.RoleType
@@ -439,6 +440,27 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 			OrgMapping:        []string{"foo:org_dev:Viewer", "bar:org_engineering:Editor"},
 			ExpectedEmail:     "john.doe@example.com",
 			ExpectedOrgRoles:  map[int64]org.RoleType{2: org.RoleViewer},
+		}, {
+			Name:         "Given a valid id_token, a valid org role path, a valid API response, expect correct org roles",
+			ResponseBody: map[string]any{"info": map[string]any{"org_roles": map[string]string{"org_dev": "Editor", "org_engineering": "Admin"}}},
+			OAuth2Extra: map[string]any{
+				// { "email": "john.doe@example.com",
+				//   "info": { "roles": [ "dev", "engineering" ] }}
+				"id_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIiwiaW5mbyI6eyJyb2xlcyI6WyJkZXYiLCJlbmdpbmVlcmluZyJdfX0.RmmQfv25eXb4p3wMrJsvXfGQ6EXhGtwRXo6SlCFHRNg"},
+			OrgRoleAttributePath: "info.org_roles",
+			ExpectedEmail:        "john.doe@example.com",
+			ExpectedOrgRoles:     map[int64]org.RoleType{2: org.RoleViewer, 4: org.RoleEditor, 5: org.RoleAdmin},
+		},
+		{
+			Name:         "Given a valid id_token, a valid org role path, a valid API response, duplicate org role assignment, expect top org role",
+			ResponseBody: map[string]any{"info": map[string]any{"org_roles": map[string]string{"2": "Editor", "org_engineering": "Editor", "5": "Admin"}}},
+			OAuth2Extra: map[string]any{
+				// { "email": "john.doe@example.com",
+				//   "info": { "roles": [ "dev", "engineering" ] }}
+				"id_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIiwiaW5mbyI6eyJyb2xlcyI6WyJkZXYiLCJlbmdpbmVlcmluZyJdfX0.RmmQfv25eXb4p3wMrJsvXfGQ6EXhGtwRXo6SlCFHRNg"},
+			OrgRoleAttributePath: "info.org_roles",
+			ExpectedEmail:        "john.doe@example.com",
+			ExpectedOrgRoles:     map[int64]org.RoleType{2: org.RoleEditor, 5: org.RoleAdmin},
 		},
 	}
 
@@ -463,6 +485,7 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 
 		provider.info.RoleAttributePath = tc.RoleAttributePath
 		provider.info.OrgAttributePath = tc.OrgAttributePath
+		provider.info.OrgRoleAttributePath = tc.OrgRoleAttributePath
 		provider.info.OrgMapping = tc.OrgMapping
 		provider.orgMappingCfg = orgRoleMapper.ParseOrgMappingSettings(context.Background(), tc.OrgMapping, tc.RoleAttributeStrict)
 		provider.info.AllowAssignGrafanaAdmin = tc.AllowAssignGrafanaAdmin
