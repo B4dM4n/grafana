@@ -181,12 +181,12 @@ func TestLegacyToUnifiedStorage_DataSyncer(t *testing.T) {
 	// mode 1
 	for _, tt := range tests {
 		t.Run("Mode-1-"+tt.name, func(t *testing.T) {
-			l := (LegacyStorage)(nil)
+			l := (Storage)(nil)
 			s := (Storage)(nil)
 			lm := &mock.Mock{}
 			um := &mock.Mock{}
 
-			ls := legacyStoreMock{lm, l}
+			ls := storageMock{lm, l}
 			us := storageMock{um, s}
 
 			if tt.setupLegacyFn != nil {
@@ -201,13 +201,12 @@ func TestLegacyToUnifiedStorage_DataSyncer(t *testing.T) {
 				LegacyStorage:     ls,
 				Storage:           us,
 				Kind:              "test.kind",
-				Reg:               p,
 				ServerLockService: &fakeServerLock{},
 				RequestInfo:       &request.RequestInfo{},
 
 				DataSyncerRecordsLimit: 1000,
 				DataSyncerInterval:     time.Hour,
-			})
+			}, NewDualWriterMetrics(nil))
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -221,12 +220,12 @@ func TestLegacyToUnifiedStorage_DataSyncer(t *testing.T) {
 	// mode 2
 	for _, tt := range tests {
 		t.Run("Mode-2-"+tt.name, func(t *testing.T) {
-			l := (LegacyStorage)(nil)
+			l := (Storage)(nil)
 			s := (Storage)(nil)
 			lm := &mock.Mock{}
 			um := &mock.Mock{}
 
-			ls := legacyStoreMock{lm, l}
+			ls := storageMock{lm, l}
 			us := storageMock{um, s}
 
 			if tt.setupLegacyFn != nil {
@@ -241,13 +240,12 @@ func TestLegacyToUnifiedStorage_DataSyncer(t *testing.T) {
 				LegacyStorage:     ls,
 				Storage:           us,
 				Kind:              "test.kind",
-				Reg:               p,
 				ServerLockService: &fakeServerLock{},
 				RequestInfo:       &request.RequestInfo{},
 
 				DataSyncerRecordsLimit: 1000,
 				DataSyncerInterval:     time.Hour,
-			})
+			}, NewDualWriterMetrics(nil))
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

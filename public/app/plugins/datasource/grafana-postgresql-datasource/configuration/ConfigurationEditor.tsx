@@ -8,7 +8,7 @@ import {
   updateDatasourcePluginJsonDataOption,
   updateDatasourcePluginResetOption,
 } from '@grafana/data';
-import { ConfigSection, ConfigSubSection, DataSourceDescription, Stack } from '@grafana/experimental';
+import { ConfigSection, ConfigSubSection, DataSourceDescription, EditorStack } from '@grafana/plugin-ui';
 import { config } from '@grafana/runtime';
 import { ConnectionLimits, Divider, TLSSecretsConfig, useMigrateDatabaseFields } from '@grafana/sql';
 import {
@@ -153,11 +153,15 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
             onBlur={onUpdateDatasourceSecureJsonDataOption(props, 'password')}
           />
         </Field>
+      </ConfigSection>
 
+      <Divider />
+
+      <ConfigSection title="TLS/SSL Auth Details" isCollapsible>
         <Field
           label={
             <Label>
-              <Stack gap={0.5}>
+              <EditorStack gap={0.5}>
                 <span>TLS/SSL Mode</span>
                 <Tooltip
                   content={
@@ -169,7 +173,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                 >
                   <Icon name="info-circle" size="sm" />
                 </Tooltip>
-              </Stack>
+              </EditorStack>
             </Label>
           }
         >
@@ -180,12 +184,11 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
             width={WIDTH_LONG}
           />
         </Field>
-
         {options.jsonData.sslmode !== PostgresTLSModes.disable ? (
           <Field
             label={
               <Label>
-                <Stack gap={0.5}>
+                <EditorStack gap={0.5}>
                   <span>TLS/SSL Method</span>
                   <Tooltip
                     content={
@@ -205,7 +208,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                   >
                     <Icon name="info-circle" size="sm" />
                   </Tooltip>
-                </Stack>
+                </EditorStack>
               </Label>
             }
           >
@@ -217,12 +220,8 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
             />
           </Field>
         ) : null}
-      </ConfigSection>
-
-      {jsonData.sslmode !== PostgresTLSModes.disable ? (
-        <>
-          <Divider />
-          <ConfigSection title="TLS/SSL Auth Details">
+        {jsonData.sslmode !== PostgresTLSModes.disable ? (
+          <>
             {jsonData.tlsConfigurationMethod === PostgresTLSMethods.fileContent ? (
               <TLSSecretsConfig
                 showCACert={
@@ -236,7 +235,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                 <Field
                   label={
                     <Label>
-                      <Stack gap={0.5}>
+                      <EditorStack gap={0.5}>
                         <span>TLS/SSL Root Certificate</span>
                         <Tooltip
                           content={
@@ -248,7 +247,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                         >
                           <Icon name="info-circle" size="sm" />
                         </Tooltip>
-                      </Stack>
+                      </EditorStack>
                     </Label>
                   }
                 >
@@ -262,7 +261,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                 <Field
                   label={
                     <Label>
-                      <Stack gap={0.5}>
+                      <EditorStack gap={0.5}>
                         <span>TLS/SSL Client Certificate</span>
                         <Tooltip
                           content={
@@ -274,7 +273,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                         >
                           <Icon name="info-circle" size="sm" />
                         </Tooltip>
-                      </Stack>
+                      </EditorStack>
                     </Label>
                   }
                 >
@@ -288,7 +287,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                 <Field
                   label={
                     <Label>
-                      <Stack gap={0.5}>
+                      <EditorStack gap={0.5}>
                         <span>TLS/SSL Client Key</span>
                         <Tooltip
                           content={
@@ -301,7 +300,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                         >
                           <Icon name="info-circle" size="sm" />
                         </Tooltip>
-                      </Stack>
+                      </EditorStack>
                     </Label>
                   }
                 >
@@ -314,9 +313,9 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                 </Field>
               </>
             )}
-          </ConfigSection>
-        </>
-      ) : null}
+          </>
+        ) : null}
+      </ConfigSection>
 
       <Divider />
 
@@ -325,7 +324,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
           <Field
             label={
               <Label>
-                <Stack gap={0.5}>
+                <EditorStack gap={0.5}>
                   <span>Version</span>
                   <Tooltip
                     content={
@@ -334,7 +333,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                   >
                     <Icon name="info-circle" size="sm" />
                   </Tooltip>
-                </Stack>
+                </EditorStack>
               </Label>
             }
           >
@@ -348,7 +347,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
           <Field
             label={
               <Label>
-                <Stack gap={0.5}>
+                <EditorStack gap={0.5}>
                   <span>Min time interval</span>
                   <Tooltip
                     content={
@@ -361,7 +360,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                   >
                     <Icon name="info-circle" size="sm" />
                   </Tooltip>
-                </Stack>
+                </EditorStack>
               </Label>
             }
           >
@@ -375,7 +374,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
           <Field
             label={
               <Label>
-                <Stack gap={0.5}>
+                <EditorStack gap={0.5}>
                   <span>TimescaleDB</span>
                   <Tooltip
                     content={
@@ -389,7 +388,7 @@ export const PostgresConfigEditor = (props: DataSourcePluginOptionsEditorProps<P
                   >
                     <Icon name="info-circle" size="sm" />
                   </Tooltip>
-                </Stack>
+                </EditorStack>
               </Label>
             }
           >

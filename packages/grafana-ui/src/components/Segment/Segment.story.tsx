@@ -4,9 +4,11 @@ import { useState } from 'react';
 import * as React from 'react';
 
 import { SelectableValue } from '@grafana/data';
-import { Segment, Icon, SegmentSection } from '@grafana/ui';
 
-import { SegmentSyncProps } from './Segment';
+import { Icon } from '../Icon/Icon';
+
+import { Segment, SegmentSyncProps } from './Segment';
+import { SegmentSection } from './SegmentSection';
 
 const AddButton = (
   <span className="gf-form-label query-part">
@@ -58,7 +60,7 @@ export const ArrayOptions = () => {
 };
 
 const meta: Meta<typeof Segment> = {
-  title: 'Data Source/Segment/SegmentSync',
+  title: 'Inputs/Segment',
   component: Segment,
 };
 

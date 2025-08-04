@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { InterpolateFunction } from '@grafana/data';
 
-import { filterSpans, TraceSpan } from './components';
+import { TraceSpan } from './components/types/trace';
+import { filterSpans } from './components/utils/filter-spans';
 
 export interface SearchProps {
   serviceName?: string;
@@ -54,7 +55,9 @@ export function useSearch(spans?: TraceSpan[], initialFilters?: SearchProps) {
 
   useEffect(() => {
     if (initialFilters) {
-      setSearch(merge(cloneDeep(defaultFilters), initialFilters));
+      setSearch((prev) => {
+        return merge(cloneDeep(prev), initialFilters);
+      });
     }
   }, [initialFilters]);
 

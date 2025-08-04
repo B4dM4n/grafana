@@ -11,13 +11,13 @@ import {
   ExploreCorrelationHelperData,
   EventBusExtended,
 } from '@grafana/data';
+import { CorrelationData } from '@grafana/runtime';
 import { DataQuery, DataSourceRef } from '@grafana/schema';
 import { getQueryKeys } from 'app/core/utils/explore';
-import { CorrelationData } from 'app/features/correlations/useCorrelations';
 import { getCorrelationsBySourceUIDs } from 'app/features/correlations/utils';
 import { getTimeZone } from 'app/features/profile/state/selectors';
-import { createAsyncThunk, ThunkResult } from 'app/types';
 import { ExploreItemState } from 'app/types/explore';
+import { createAsyncThunk, ThunkResult } from 'app/types/store';
 
 import { datasourceReducer } from './datasource';
 import { queryReducer, runQueries } from './query';

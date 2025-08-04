@@ -46,10 +46,10 @@ import { LokiQuery } from './types';
  */
 
 export function runShardSplitQuery(datasource: LokiDatasource, request: DataQueryRequest<LokiQuery>) {
-  const queries = datasource
-    .interpolateVariablesInQueries(request.targets, request.scopedVars)
+  const queries = request.targets
     .filter((query) => query.expr)
-    .filter((query) => !query.hide);
+    .filter((query) => !query.hide)
+    .map((query) => datasource.applyTemplateVariables(query, request.scopedVars, request.filters));
 
   return splitQueriesByStreamShard(datasource, request, queries);
 }
@@ -160,9 +160,10 @@ function splitQueriesByStreamShard(
 
     debug(shardsToQuery.length ? `Querying ${shardsToQuery.join(', ')}` : 'Running regular query');
 
-    const queryRunner =
-      shardsToQuery.length > 0 ? datasource.runQuery.bind(datasource) : runSplitQuery.bind(null, datasource);
-    subquerySubscription = queryRunner(subRequest).subscribe({
+    subquerySubscription = runSplitQuery(datasource, subRequest, {
+      skipPartialUpdates: true,
+      disableRetry: true,
+    }).subscribe({
       next: (partialResponse: DataQueryResponse) => {
         if ((partialResponse.errors ?? []).length > 0 || partialResponse.error != null) {
           if (retry(partialResponse)) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/services/dashboards"
+	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/services/folder/foldertest"
 	"github.com/grafana/grafana/pkg/services/org/orgtest"
 	"github.com/grafana/grafana/pkg/services/stats/statsimpl"
@@ -26,9 +27,9 @@ func TestMain(m *testing.M) {
 	testsuite.Run(m)
 }
 
-func TestConcurrentUsersMetrics(t *testing.T) {
+func TestIntegrationConcurrentUsersMetrics(t *testing.T) {
 	sqlStore, cfg := db.InitTestDBWithCfg(t)
-	statsService := statsimpl.ProvideService(&setting.Cfg{}, sqlStore, &dashboards.FakeDashboardService{}, &foldertest.FakeService{}, &orgtest.FakeOrgService{})
+	statsService := statsimpl.ProvideService(&setting.Cfg{}, sqlStore, &dashboards.FakeDashboardService{}, &foldertest.FakeService{}, &orgtest.FakeOrgService{}, featuremgmt.WithFeatures())
 	s := createService(t, cfg, sqlStore, statsService)
 
 	createConcurrentTokens(t, sqlStore)
@@ -44,9 +45,9 @@ func TestConcurrentUsersMetrics(t *testing.T) {
 	assert.Equal(t, int32(6), stats["stats.auth_token_per_user_le_inf"])
 }
 
-func TestConcurrentUsersStats(t *testing.T) {
+func TestIntegrationConcurrentUsersStats(t *testing.T) {
 	sqlStore, cfg := db.InitTestDBWithCfg(t)
-	statsService := statsimpl.ProvideService(&setting.Cfg{}, sqlStore, &dashboards.FakeDashboardService{}, &foldertest.FakeService{}, &orgtest.FakeOrgService{})
+	statsService := statsimpl.ProvideService(&setting.Cfg{}, sqlStore, &dashboards.FakeDashboardService{}, &foldertest.FakeService{}, &orgtest.FakeOrgService{}, featuremgmt.WithFeatures())
 	s := createService(t, cfg, sqlStore, statsService)
 
 	createConcurrentTokens(t, sqlStore)

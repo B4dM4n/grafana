@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 	testsuite.Run(m)
 }
 
-func TestParseMetricRequest(t *testing.T) {
+func TestIntegrationParseMetricRequest(t *testing.T) {
 	t.Run("Test a simple single datasource query", func(t *testing.T) {
 		tc := setup(t)
 		mr := metricRequestWithQueries(t, `{
@@ -268,7 +268,7 @@ func TestParseMetricRequest(t *testing.T) {
 	})
 }
 
-func TestQueryDataMultipleSources(t *testing.T) {
+func TestIntegrationQueryDataMultipleSources(t *testing.T) {
 	t.Run("can query multiple datasources", func(t *testing.T) {
 		tc := setup(t)
 		query1, err := simplejson.NewJson([]byte(`
@@ -462,7 +462,7 @@ func setup(t *testing.T) *testContext {
 	t.Helper()
 	pc := &fakePluginClient{}
 	dc := &fakeDataSourceCache{cache: dss}
-	rv := &fakePluginRequestValidator{}
+	rv := &fakeDataSourceRequestValidator{}
 
 	sqlStore, cfg := db.InitTestDBWithCfg(t)
 	secretsService := secretsmng.SetupTestService(t, fakes.NewFakeSecretsStore())
@@ -497,7 +497,7 @@ func setup(t *testing.T) *testContext {
 type testContext struct {
 	pluginContext          *fakePluginClient
 	secretStore            secretskvs.SecretsKVStore
-	pluginRequestValidator *fakePluginRequestValidator
+	pluginRequestValidator *fakeDataSourceRequestValidator
 	queryService           *ServiceImpl // implementation belonging to this package
 	signedInUser           *user.SignedInUser
 }
@@ -518,11 +518,11 @@ func metricRequestWithQueries(t *testing.T, rawQueries ...string) dtos.MetricReq
 	}
 }
 
-type fakePluginRequestValidator struct {
+type fakeDataSourceRequestValidator struct {
 	err error
 }
 
-func (rv *fakePluginRequestValidator) Validate(dsURL string, req *http.Request) error {
+func (rv *fakeDataSourceRequestValidator) Validate(ds *datasources.DataSource, req *http.Request) error {
 	return rv.err
 }
 

@@ -1,22 +1,20 @@
 import { useCallback } from 'react';
 
+import { Trans, t } from '@grafana/i18n';
 import { CallToActionCard, EmptyState, LinkButton, TextLink } from '@grafana/ui';
-import { Trans, t } from 'app/core/internationalization';
 import { DashboardViewItem } from 'app/features/search/types';
-import { useDispatch } from 'app/types';
+import { useDispatch } from 'app/types/store';
 
 import { PAGE_SIZE } from '../api/services';
+import { fetchNextChildrenPage } from '../state/actions';
 import {
   useFlatTreeState,
   useCheckboxSelectionState,
-  setFolderOpenState,
-  setItemSelectionState,
   useChildrenByParentUIDState,
-  setAllSelection,
   useBrowseLoadingStatus,
   useLoadNextChildrenPage,
-  fetchNextChildrenPage,
-} from '../state';
+} from '../state/hooks';
+import { setFolderOpenState, setItemSelectionState, setAllSelection } from '../state/slice';
 import { BrowseDashboardsState, DashboardTreeSelection, SelectionState } from '../types';
 
 import { DashboardsTree } from './DashboardsTree';
@@ -144,7 +142,13 @@ export function BrowseView({ folderUID, width, height, canSelect }: BrowseViewPr
             )}
           </EmptyState>
         ) : (
-          <CallToActionCard callToActionElement={<span>This folder is empty</span>} />
+          <CallToActionCard
+            callToActionElement={
+              <span>
+                <Trans i18nKey="browse-dashboards.browse-view.this-folder-is-empty">This folder is empty</Trans>
+              </span>
+            }
+          />
         )}
       </div>
     );

@@ -31,6 +31,7 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 		AllowAssignGrafanaAdmin bool
 		ResponseBody            any
 		OAuth2Extra             any
+		AccessToken             string
 		Setup                   func(*orgtest.FakeOrgService)
 		RoleAttributePath       string
 		RoleAttributeStrict     bool
@@ -462,6 +463,62 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 			ExpectedEmail:        "john.doe@example.com",
 			ExpectedOrgRoles:     map[int64]org.RoleType{2: org.RoleEditor, 5: org.RoleAdmin},
 		},
+		// Access Token Test Cases
+		{
+			Name:              "Given a valid access token with role, no ID token, no API response, use access token",
+			ResponseBody:      map[string]any{},
+			OAuth2Extra:       map[string]any{},
+			AccessToken:       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiRWRpdG9yIiwiZW1haWwiOiJhY2Nlc3MudG9rZW5AZXhhbXBsZS5jb20ifQ.oVEMSJVqBwrGXOcwGgXL_8J-CZhgFVPjXXSqzPJQ5JU", // { "role": "Editor", "email": "access.token@example.com" }
+			RoleAttributePath: "role",
+			ExpectedEmail:     "access.token@example.com",
+			ExpectedOrgRoles:  map[int64]org.RoleType{2: org.RoleEditor},
+		},
+		{
+			Name:              "Given a valid access token with org roles, no ID token, no API response, use access token",
+			ResponseBody:      map[string]any{},
+			OAuth2Extra:       map[string]any{},
+			AccessToken:       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiVmlld2VyIiwiZW1haWwiOiJhY2Nlc3MudG9rZW5AZXhhbXBsZS5jb20iLCJpbmZvIjp7InJvbGVzIjpbImFjY2Vzcy1kZXYiLCJhY2Nlc3Mtb3BzIl19fQ.g8-mNJQDL9CJWgRTFdKBRRKbsHZfFhJrzPYQGXfxGIE", // { "role": "Viewer", "email": "access.token@example.com", "info": { "roles": [ "access-dev", "access-ops" ] }}
+			RoleAttributePath: "role",
+			OrgAttributePath:  "info.roles",
+			OrgMapping:        []string{"access-dev:org_dev:Admin", "access-ops:org_engineering:Editor"},
+			ExpectedEmail:     "access.token@example.com",
+			ExpectedOrgRoles:  map[int64]org.RoleType{4: org.RoleAdmin, 5: org.RoleEditor},
+		},
+		{
+			Name:         "Given a valid access token and ID token, prefer ID token",
+			ResponseBody: map[string]any{},
+			OAuth2Extra: map[string]any{
+				// { "role": "Admin", "email": "id.token@example.com" }
+				"id_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiQWRtaW4iLCJlbWFpbCI6ImlkLnRva2VuQGV4YW1wbGUuY29tIn0.T8wcoOOPQ_av9VsOFoYJZGNFGJgG0d3LPDvtxvgODkU",
+			},
+			AccessToken:       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiRWRpdG9yIiwiZW1haWwiOiJhY2Nlc3MudG9rZW5AZXhhbXBsZS5jb20ifQ.oVEMSJVqBwrGXOcwGgXL_8J-CZhgFVPjXXSqzPJQ5JU", // { "role": "Editor", "email": "access.token@example.com" }
+			RoleAttributePath: "role",
+			ExpectedEmail:     "id.token@example.com",
+			ExpectedOrgRoles:  map[int64]org.RoleType{2: org.RoleAdmin},
+		},
+		{
+			Name:         "Given a valid access token with no email, ID token with no role, API response with no data, merge",
+			ResponseBody: map[string]any{},
+			OAuth2Extra: map[string]any{
+				// { "email": "id.token@example.com" }
+				"id_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImlkLnRva2VuQGV4YW1wbGUuY29tIn0.k5GwPcZvGe2BE_jgwN0ntz0nz4KlYhEd0hRRLApkTJ4",
+			},
+			AccessToken:       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiRWRpdG9yIn0.gfnKWZKNFNqrILhHFzabBVEWnJJIZBmQSBwLPCHhLUY", // { "role": "Editor" }
+			RoleAttributePath: "role",
+			ExpectedEmail:     "id.token@example.com",
+			ExpectedOrgRoles:  map[int64]org.RoleType{2: org.RoleEditor},
+		},
+		{
+			Name:                    "Given a valid access token with GrafanaAdmin role and AssignGrafanaAdmin enabled",
+			AllowAssignGrafanaAdmin: true,
+			ResponseBody:            map[string]any{},
+			OAuth2Extra:             map[string]any{},
+			AccessToken:             "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiR3JhZmFuYUFkbWluIiwiZW1haWwiOiJhY2Nlc3MudG9rZW5AZXhhbXBsZS5jb20ifQ.fJPjMgZW9bOYXOLgOUekNQmNrVbUNhU1iqQJwqFWzUY", // { "role": "GrafanaAdmin", "email": "access.token@example.com" }
+			RoleAttributePath:       "role",
+			ExpectedEmail:           "access.token@example.com",
+			ExpectedGrafanaAdmin:    trueBoolPtr(),
+			ExpectedOrgRoles:        map[int64]org.RoleType{2: org.RoleAdmin},
+		},
 	}
 
 	cfg := &setting.Cfg{
@@ -480,7 +537,7 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 			EmailAttributePath: "email",
 		}, cfg,
 			orgRoleMapper,
-			&ssosettingstests.MockService{},
+			ssosettingstests.NewFakeService(),
 			featuremgmt.WithFeatures())
 
 		provider.info.RoleAttributePath = tc.RoleAttributePath
@@ -502,8 +559,9 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 				require.NoError(t, err)
 			}))
 			provider.info.ApiUrl = ts.URL
+
 			staticToken := oauth2.Token{
-				AccessToken:  "",
+				AccessToken:  tc.AccessToken,
 				TokenType:    "",
 				RefreshToken: "",
 				Expiry:       time.Now(),
@@ -530,7 +588,7 @@ func TestUserInfoSearchesForEmailAndOrgRoles(t *testing.T) {
 			EmailAttributePath: "email",
 		}, cfg,
 			orgRoleMapper,
-			&ssosettingstests.MockService{},
+			ssosettingstests.NewFakeService(),
 			featuremgmt.WithFeatures())
 
 		body, err := json.Marshal(map[string]any{"info": map[string]any{"roles": []string{"engineering", "SRE"}}})
@@ -623,7 +681,7 @@ func TestUserInfoSearchesForLogin(t *testing.T) {
 		},
 	}, setting.NewCfg(),
 		ProvideOrgRoleMapper(setting.NewCfg(), orgtest.NewOrgServiceFake()),
-		&ssosettingstests.MockService{},
+		ssosettingstests.NewFakeService(),
 		featuremgmt.WithFeatures())
 
 	for _, tc := range testCases {
@@ -723,7 +781,7 @@ func TestUserInfoSearchesForName(t *testing.T) {
 	},
 		setting.NewCfg(),
 		ProvideOrgRoleMapper(setting.NewCfg(), orgtest.NewOrgServiceFake()),
-		&ssosettingstests.MockService{},
+		ssosettingstests.NewFakeService(),
 		featuremgmt.WithFeatures())
 
 	for _, tc := range testCases {
@@ -805,7 +863,7 @@ func TestUserInfoSearchesForGroup(t *testing.T) {
 				ApiUrl:              ts.URL,
 			}, setting.NewCfg(),
 				ProvideOrgRoleMapper(setting.NewCfg(), orgtest.NewOrgServiceFake()),
-				&ssosettingstests.MockService{},
+				ssosettingstests.NewFakeService(),
 				featuremgmt.WithFeatures())
 
 			token := &oauth2.Token{
@@ -825,7 +883,7 @@ func TestUserInfoSearchesForGroup(t *testing.T) {
 func TestPayloadCompression(t *testing.T) {
 	provider := NewGenericOAuthProvider(&social.OAuthInfo{
 		EmailAttributePath: "email",
-	}, &setting.Cfg{}, nil, &ssosettingstests.MockService{}, featuremgmt.WithFeatures())
+	}, &setting.Cfg{}, nil, ssosettingstests.NewFakeService(), featuremgmt.WithFeatures())
 
 	tests := []struct {
 		Name          string
@@ -876,7 +934,7 @@ func TestPayloadCompression(t *testing.T) {
 			}
 
 			token := staticToken.WithExtra(test.OAuth2Extra)
-			userInfo := provider.extractFromToken(token)
+			userInfo := provider.extractFromIDToken(token)
 
 			if test.ExpectedEmail == "" {
 				require.Nil(t, userInfo, "Testing case %q", test.Name)
@@ -980,7 +1038,7 @@ func TestSocialGenericOAuth_InitializeExtraFields(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewGenericOAuthProvider(tc.settings, &setting.Cfg{}, nil, &ssosettingstests.MockService{}, featuremgmt.WithFeatures())
+			s := NewGenericOAuthProvider(tc.settings, &setting.Cfg{}, nil, ssosettingstests.NewFakeService(), featuremgmt.WithFeatures())
 
 			require.Equal(t, tc.want.nameAttributePath, s.nameAttributePath)
 			require.Equal(t, tc.want.loginAttributePath, s.loginAttributePath)
@@ -1019,6 +1077,34 @@ func TestSocialGenericOAuth_Validate(t *testing.T) {
 					"teams_url": "",
 					"auth_url":  "https://example.com/auth",
 					"token_url": "https://example.com/token",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "passes when team_ids is an empty array and teams_id_attribute_path and teams_url are empty",
+			settings: ssoModels.SSOSettings{
+				Settings: map[string]any{
+					"client_id":               "client-id",
+					"team_ids_attribute_path": "",
+					"teams_url":               "",
+					"auth_url":                "https://example.com/auth",
+					"token_url":               "https://example.com/token",
+					"team_ids":                "[]",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "passes when team_ids is set and teams_id_attribute_path and teams_url are not empty",
+			settings: ssoModels.SSOSettings{
+				Settings: map[string]any{
+					"client_id":               "client-id",
+					"team_ids_attribute_path": "teams",
+					"teams_url":               "https://example.com/teams",
+					"auth_url":                "https://example.com/auth",
+					"token_url":               "https://example.com/token",
+					"team_ids":                "[\"123\"]",
 				},
 			},
 			wantErr: nil,
@@ -1139,11 +1225,39 @@ func TestSocialGenericOAuth_Validate(t *testing.T) {
 			},
 			wantErr: ssosettings.ErrBaseInvalidOAuthConfig,
 		},
+		{
+			name: "fails when team_ids is a valid string and teams_id_attribute_path and teams_url are empty",
+			settings: ssoModels.SSOSettings{
+				Settings: map[string]any{
+					"client_id":               "client-id",
+					"team_ids_attribute_path": "",
+					"teams_url":               "",
+					"auth_url":                "https://example.com/auth",
+					"token_url":               "https://example.com/token",
+					"team_ids":                "123",
+				},
+			},
+			wantErr: ssosettings.ErrBaseInvalidOAuthConfig,
+		},
+		{
+			name: "fails when team_ids is a valid array and teams_id_attribute_path and teams_url are empty",
+			settings: ssoModels.SSOSettings{
+				Settings: map[string]any{
+					"client_id":               "client-id",
+					"team_ids_attribute_path": "",
+					"teams_url":               "",
+					"auth_url":                "https://example.com/auth",
+					"token_url":               "https://example.com/token",
+					"team_ids":                "[\"123\",\"456\",\"789\"]",
+				},
+			},
+			wantErr: ssosettings.ErrBaseInvalidOAuthConfig,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewGenericOAuthProvider(&social.OAuthInfo{}, &setting.Cfg{}, nil, &ssosettingstests.MockService{}, featuremgmt.WithFeatures())
+			s := NewGenericOAuthProvider(&social.OAuthInfo{}, &setting.Cfg{}, nil, ssosettingstests.NewFakeService(), featuremgmt.WithFeatures())
 
 			if tc.requester == nil {
 				tc.requester = &user.SignedInUser{IsGrafanaAdmin: false}
@@ -1223,7 +1337,7 @@ func TestSocialGenericOAuth_Reload(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewGenericOAuthProvider(tc.info, &setting.Cfg{}, nil, &ssosettingstests.MockService{}, featuremgmt.WithFeatures())
+			s := NewGenericOAuthProvider(tc.info, &setting.Cfg{}, nil, ssosettingstests.NewFakeService(), featuremgmt.WithFeatures())
 
 			err := s.Reload(context.Background(), tc.settings)
 			if tc.expectError {
@@ -1321,7 +1435,7 @@ func TestGenericOAuth_Reload_ExtraFields(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewGenericOAuthProvider(tc.info, setting.NewCfg(), nil, &ssosettingstests.MockService{}, featuremgmt.WithFeatures())
+			s := NewGenericOAuthProvider(tc.info, setting.NewCfg(), nil, ssosettingstests.NewFakeService(), featuremgmt.WithFeatures())
 
 			err := s.Reload(context.Background(), tc.settings)
 			require.NoError(t, err)

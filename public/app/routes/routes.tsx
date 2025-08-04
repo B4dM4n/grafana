@@ -17,11 +17,13 @@ import { ConfigureIRM } from 'app/features/gops/configuration-tracker/components
 import { getRoutes as getPluginCatalogRoutes } from 'app/features/plugins/admin/routes';
 import { getAppPluginRoutes } from 'app/features/plugins/routes';
 import { getProfileRoutes } from 'app/features/profile/routes';
-import { AccessControlAction, DashboardRoutes } from 'app/types';
+import { AccessControlAction } from 'app/types/accessControl';
+import { DashboardRoutes } from 'app/types/dashboard';
 
 import { SafeDynamicImport } from '../core/components/DynamicImports/SafeDynamicImport';
 import { RouteDescriptor } from '../core/navigation/types';
 import { getPublicDashboardRoutes } from '../features/dashboard/routes';
+import { getProvisioningRoutes } from '../features/provisioning/utils/routes';
 
 const isDevEnv = config.buildInfo.env === 'development';
 export const extraRoutes: RouteDescriptor[] = [];
@@ -96,8 +98,10 @@ export function getAppRoutes(): RouteDescriptor[] {
       path: '/dashboard-solo/:type/:slug',
       routeName: DashboardRoutes.Normal,
       chromeless: true,
-      component: SafeDynamicImport(
-        () => import(/* webpackChunkName: "SoloPanelPage" */ '../features/dashboard/containers/SoloPanelPage')
+      component: SafeDynamicImport(() =>
+        config.featureToggles.dashboardSceneSolo
+          ? import(/* webpackChunkName: "SoloPanelPage" */ '../features/dashboard-scene/solo/SoloPanelPage')
+          : import(/* webpackChunkName: "SoloPanelPageOld" */ '../features/dashboard/containers/SoloPanelPage')
       ),
     },
     {
@@ -161,6 +165,10 @@ export function getAppRoutes(): RouteDescriptor[] {
       ),
     },
     {
+      path: '/drilldown',
+      component: () => <NavLandingPage navId="drilldown" />,
+    },
+    {
       path: '/apps',
       component: () => <NavLandingPage navId="apps" />,
     },
@@ -181,7 +189,11 @@ export function getAppRoutes(): RouteDescriptor[] {
     },
     {
       path: '/monitoring',
-      component: () => <NavLandingPage navId="monitoring" />,
+      component: () => <Navigate replace to="/observability" />,
+    },
+    {
+      path: '/observability',
+      component: () => <NavLandingPage navId="observability" />,
     },
     {
       path: '/infrastructure',
@@ -238,13 +250,6 @@ export function getAppRoutes(): RouteDescriptor[] {
       ),
     },
     {
-      path: '/org/apikeys',
-      roles: () => contextSrv.evaluatePermission([AccessControlAction.ActionAPIKeysRead]),
-      component: SafeDynamicImport(
-        () => import(/* webpackChunkName: "ApiKeysPage" */ 'app/features/api-keys/ApiKeysPage')
-      ),
-    },
-    {
       path: '/org/serviceaccounts',
       roles: () =>
         contextSrv.evaluatePermission([
@@ -297,7 +302,7 @@ export function getAppRoutes(): RouteDescriptor[] {
       path: '/admin/authentication',
       roles: () => contextSrv.evaluatePermission([AccessControlAction.SettingsWrite]),
       component:
-        config.licenseInfo.enabledFeatures?.saml || config.ldapEnabled || config.featureToggles.ssoSettingsApi
+        config.licenseInfo.enabledFeatures?.saml || config.ldapEnabled
           ? SafeDynamicImport(
               () =>
                 import(/* webpackChunkName: "AdminAuthentication" */ '../features/auth-config/AuthProvidersListPage')
@@ -315,11 +320,9 @@ export function getAppRoutes(): RouteDescriptor[] {
     {
       path: '/admin/authentication/:provider',
       roles: () => contextSrv.evaluatePermission([AccessControlAction.SettingsWrite]),
-      component: config.featureToggles.ssoSettingsApi
-        ? SafeDynamicImport(
-            () => import(/* webpackChunkName: "AdminAuthentication" */ '../features/auth-config/ProviderConfigPage')
-          )
-        : () => <Navigate replace to="/admin" />,
+      component: SafeDynamicImport(
+        () => import(/* webpackChunkName: "AdminAuthentication" */ '../features/auth-config/ProviderConfigPage')
+      ),
     },
     {
       path: '/admin/settings',
@@ -442,13 +445,6 @@ export function getAppRoutes(): RouteDescriptor[] {
         () => import(/* webpackChunkName: "SnapshotListPage" */ 'app/features/manage-dashboards/SnapshotListPage')
       ),
     },
-    config.featureToggles.dashboardRestore && {
-      path: '/dashboard/recently-deleted',
-      roles: () => ['Admin', 'ServerAdmin'],
-      component: SafeDynamicImport(
-        () => import(/* webpackChunkName: "RecentlyDeletedPage" */ 'app/features/browse-dashboards/RecentlyDeletedPage')
-      ),
-    },
     {
       path: '/playlists',
       component: SafeDynamicImport(
@@ -513,12 +509,12 @@ export function getAppRoutes(): RouteDescriptor[] {
         () => import(/* webpackChunkName: "NotificationsPage"*/ 'app/features/notifications/NotificationsPage')
       ),
     },
-    config.featureToggles.exploreMetrics && {
+    {
+      // A redirect to the Grafana Metrics Drilldown app from legacy Explore Metrics routes
       path: '/explore/metrics/*',
-      chromeless: false,
       roles: () => contextSrv.evaluatePermission([AccessControlAction.DataSourcesExplore]),
       component: SafeDynamicImport(
-        () => import(/* webpackChunkName: "DataTrailsPage"*/ 'app/features/trails/DataTrailsPage')
+        () => import(/* webpackChunkName: "MetricsDrilldownRedirect"*/ 'app/features/trails/RedirectToDrilldownApp')
       ),
     },
     {
@@ -527,6 +523,18 @@ export function getAppRoutes(): RouteDescriptor[] {
         () => import(/* webpackChunkName: "BookmarksPage"*/ 'app/features/bookmarks/BookmarksPage')
       ),
     },
+    config.featureToggles.restoreDashboards && {
+      path: '/dashboard/recently-deleted',
+      roles: () => ['Admin', 'ServerAdmin'],
+      component: SafeDynamicImport(
+        () => import(/* webpackChunkName: "RecentlyDeletedPage" */ 'app/features/browse-dashboards/RecentlyDeletedPage')
+      ),
+    },
+    {
+      // Redirect the /femt dev page to the root
+      path: '/femt',
+      component: () => <Navigate replace to="/" />,
+    },
     ...getPluginCatalogRoutes(),
     ...getSupportBundleRoutes(),
     ...getAlertingRoutes(),
@@ -534,6 +542,7 @@ export function getAppRoutes(): RouteDescriptor[] {
     ...extraRoutes,
     ...getPublicDashboardRoutes(),
     ...getDataConnectionsRoutes(),
+    ...getProvisioningRoutes(),
     {
       path: '/goto/*',
       component: HandleGoToRedirect,

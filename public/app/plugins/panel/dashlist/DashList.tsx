@@ -1,6 +1,6 @@
 import { take } from 'lodash';
-import { useEffect, useMemo, useState } from 'react';
-import * as React from 'react';
+import { SyntheticEvent, useEffect, useMemo, useState } from 'react';
+import { useThrottle } from 'react-use';
 
 import {
   DataLinkBuiltInVars,
@@ -23,7 +23,7 @@ import impressionSrv from 'app/core/services/impression_srv';
 import { getDashboardSrv } from 'app/features/dashboard/services/DashboardSrv';
 import { DashboardSearchItem } from 'app/features/search/types';
 import { VariablesChanged } from 'app/features/variables/types';
-import { useDispatch, useSelector } from 'app/types';
+import { useDispatch, useSelector } from 'app/types/store';
 
 import { Options } from './panelcfg.gen';
 import { getStyles } from './styles';
@@ -107,13 +107,15 @@ export function DashList(props: PanelProps<Options>) {
   const dispatch = useDispatch();
   const navIndex = useSelector((state) => state.navIndex);
 
+  const throttledRenderCount = useThrottle(props.renderCounter, 5000);
+
   useEffect(() => {
     fetchDashboards(props.options, props.replaceVariables).then((dashes) => {
       setDashboards(dashes);
     });
-  }, [props.options, props.replaceVariables, props.renderCounter]);
+  }, [props.options, props.replaceVariables, throttledRenderCount]);
 
-  const toggleDashboardStar = async (e: React.SyntheticEvent, dash: Dashboard) => {
+  const toggleDashboardStar = async (e: SyntheticEvent, dash: Dashboard) => {
     const { uid, title, url } = dash;
     e.preventDefault();
     e.stopPropagation();

@@ -2,9 +2,12 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { isEmpty, isString, set } from 'lodash';
 
 import { dateTimeFormatTimeAgo, setWeekStart, TimeZone } from '@grafana/data';
+import { getWeekStart, WeekStart } from '@grafana/ui';
 import config from 'app/core/config';
 import { contextSrv } from 'app/core/core';
-import { Team, ThunkResult, UserDTO, UserOrg, UserSession } from 'app/types';
+import { ThunkResult } from 'app/types/store';
+import { Team } from 'app/types/teams';
+import { UserDTO, UserOrg, UserSession } from 'app/types/user';
 
 export interface UserState {
   orgId: number;
@@ -116,10 +119,10 @@ export const updateTimeZoneForSession = (timeZone: TimeZone): ThunkResult<void> 
   };
 };
 
-export const updateWeekStartForSession = (weekStart: string): ThunkResult<void> => {
+export const updateWeekStartForSession = (weekStart?: WeekStart): ThunkResult<void> => {
   return async (dispatch) => {
-    if (!isString(weekStart) || isEmpty(weekStart)) {
-      weekStart = config?.bootData?.user?.weekStart;
+    if (!weekStart) {
+      weekStart = getWeekStart();
     }
 
     set(contextSrv, 'user.weekStart', weekStart);

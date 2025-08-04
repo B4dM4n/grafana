@@ -7,6 +7,7 @@ import (
 	"github.com/grafana/grafana/pkg/infra/remotecache"
 	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/login/social"
+	"github.com/grafana/grafana/pkg/login/social/connectors"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
 	"github.com/grafana/grafana/pkg/services/accesscontrol/permreg"
 	"github.com/grafana/grafana/pkg/services/apikey"
@@ -57,8 +58,7 @@ func ProvideRegistration(
 	var passwordClients []authn.PasswordClient
 
 	// always register LDAP if LDAP is enabled in SSO settings
-	ssoSettingsLDAP := features.IsEnabledGlobally(featuremgmt.FlagSsoSettingsApi) && features.IsEnabledGlobally(featuremgmt.FlagSsoSettingsLDAP)
-	if cfg.LDAPAuthEnabled || ssoSettingsLDAP {
+	if cfg.LDAPAuthEnabled || features.IsEnabledGlobally(featuremgmt.FlagSsoSettingsLDAP) {
 		ldap := clients.ProvideLDAP(cfg, ldapService, userService, authInfoService)
 		proxyClients = append(proxyClients, ldap)
 		passwordClients = append(passwordClients, ldap)
@@ -112,10 +112,11 @@ func ProvideRegistration(
 	}
 
 	if cfg.JWTAuth.Enabled {
-		authnSvc.RegisterClient(clients.ProvideJWT(jwtService, cfg))
+		orgRoleMapper := connectors.ProvideOrgRoleMapper(cfg, orgService)
+		authnSvc.RegisterClient(clients.ProvideJWT(jwtService, orgRoleMapper, cfg))
 	}
 
-	if cfg.ExtJWTAuth.Enabled && features.IsEnabledGlobally(featuremgmt.FlagAuthAPIAccessTokenAuth) {
+	if cfg.ExtJWTAuth.Enabled {
 		authnSvc.RegisterClient(clients.ProvideExtendedJWT(cfg))
 	}
 
@@ -124,15 +125,24 @@ func ProvideRegistration(
 		authnSvc.RegisterClient(clients.ProvideOAuth(clientName, cfg, oauthTokenService, socialService, settingsProviderService, features))
 	}
 
+	if features.IsEnabledGlobally(featuremgmt.FlagProvisioning) {
+		authnSvc.RegisterClient(clients.ProvideProvisioning())
+	}
+
 	// FIXME (jguer): move to User package
-	userSync := sync.ProvideUserSync(userService, userProtectionService, authInfoService, quotaService, tracer, features)
+	// Pass nil for k8sClient - it will be handled gracefully in the SCIMSettingsUtil
+	userSync := sync.ProvideUserSync(userService, userProtectionService, authInfoService, quotaService, tracer, features, cfg, nil)
 	orgSync := sync.ProvideOrgSync(userService, orgService, accessControlService, cfg, tracer)
 	authnSvc.RegisterPostAuthHook(userSync.SyncUserHook, 10)
 	authnSvc.RegisterPostAuthHook(userSync.EnableUserHook, 20)
-	authnSvc.RegisterPostAuthHook(orgSync.SyncOrgRolesHook, 30)
+	authnSvc.RegisterPostAuthHook(orgSync.SyncOrgRolesHook, 40)
 	authnSvc.RegisterPostAuthHook(userSync.SyncLastSeenHook, 130)
 	authnSvc.RegisterPostAuthHook(sync.ProvideOAuthTokenSync(oauthTokenService, sessionService, socialService, tracer, features).SyncOauthTokenHook, 60)
 	authnSvc.RegisterPostAuthHook(userSync.FetchSyncedUserHook, 100)
+
+	if features.IsEnabledGlobally(featuremgmt.FlagEnableSCIM) {
+		authnSvc.RegisterPostAuthHook(userSync.ValidateUserProvisioningHook, 30)
+	}
 
 	rbacSync := sync.ProvideRBACSync(accessControlService, tracer, permRegistry)
 	if features.IsEnabledGlobally(featuremgmt.FlagCloudRBACRoles) {
@@ -142,8 +152,11 @@ func ProvideRegistration(
 
 	authnSvc.RegisterPostAuthHook(rbacSync.SyncPermissionsHook, 120)
 	authnSvc.RegisterPostLoginHook(orgSync.SetDefaultOrgHook, 140)
+	authnSvc.RegisterPostLoginHook(rbacSync.ClearUserPermissionCacheHook, 170)
 
 	nsSync := sync.ProvideNamespaceSync(cfg)
 	authnSvc.RegisterPostAuthHook(nsSync.SyncNamespace, 150)
+	authnSvc.RegisterPostAuthHook(sync.AccessClaimsHook, 160)
+
 	return Registration{}
 }

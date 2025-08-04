@@ -10,31 +10,38 @@ import {
   FieldType,
   TransformerCategory,
 } from '@grafana/data';
+import { t } from '@grafana/i18n';
 import { InlineField, InlineFieldRow } from '@grafana/ui';
-import { FieldNamePicker } from '@grafana/ui/src/components/MatchersUI/FieldNamePicker';
+import { FieldNamePicker } from '@grafana/ui/internal';
 import { GazetteerPathEditor, GazetteerPathEditorConfigSettings } from 'app/features/geo/editor/GazetteerPathEditor';
 
 import { getTransformationContent } from '../docs/getTransformationContent';
 
 import { FieldLookupOptions, fieldLookupTransformer } from './fieldLookup';
 
-const fieldNamePickerSettings: StandardEditorsRegistryItem<string, FieldNamePickerConfigSettings> = {
-  settings: {
-    width: 30,
-    filter: (f) => f.type === FieldType.string,
-    placeholderText: 'Select text field',
-    noFieldsMessage: 'No text fields found',
-  },
-  name: '',
-  id: '',
-  editor: () => null,
-};
-
 const fieldLookupSettings = {
   settings: {},
 } as StandardEditorsRegistryItem<string, GazetteerPathEditorConfigSettings>;
 
 export const FieldLookupTransformerEditor = ({ input, options, onChange }: TransformerUIProps<FieldLookupOptions>) => {
+  const fieldNamePickerSettings: StandardEditorsRegistryItem<string, FieldNamePickerConfigSettings> = {
+    settings: {
+      width: 30,
+      filter: (f) => f.type === FieldType.string,
+      placeholderText: t(
+        'transformers.field-lookup-transformer-editor.field-name-picker-settings.placeholderText.select-text-field',
+        'Select text field'
+      ),
+      noFieldsMessage: t(
+        'transformers.field-lookup-transformer-editor.field-name-picker-settings.noFieldsMessage.no-text-fields-found',
+        'No text fields found'
+      ),
+    },
+    name: '',
+    id: '',
+    editor: () => null,
+  };
+
   const onPickLookupField = useCallback(
     (value: string | undefined) => {
       onChange({
@@ -57,7 +64,7 @@ export const FieldLookupTransformerEditor = ({ input, options, onChange }: Trans
   return (
     <div>
       <InlineFieldRow>
-        <InlineField label={'Field'} labelWidth={12}>
+        <InlineField label={t('transformers.field-lookup-transformer-editor.label-field', 'Field')} labelWidth={12}>
           <FieldNamePicker
             context={{ data: input }}
             value={options?.lookupField ?? ''}
@@ -67,7 +74,7 @@ export const FieldLookupTransformerEditor = ({ input, options, onChange }: Trans
         </InlineField>
       </InlineFieldRow>
       <InlineFieldRow>
-        <InlineField label={'Lookup'} labelWidth={12}>
+        <InlineField label={t('transformers.field-lookup-transformer-editor.label-lookup', 'Lookup')} labelWidth={12}>
           <GazetteerPathEditor
             value={options?.gazetteer ?? ''}
             context={{ data: input }}

@@ -12,6 +12,7 @@ import {
   SplitOpen,
   TimeRange,
 } from '@grafana/data';
+import { t } from '@grafana/i18n';
 import {
   TraceToProfilesOptions,
   TraceToMetricsOptions,
@@ -27,8 +28,8 @@ import { getDatasourceSrv } from 'app/features/plugins/datasource_srv';
 import { LokiQuery } from '../../../plugins/datasource/loki/types';
 import { ExploreFieldLinkModel, getFieldLinksForExplore, getVariableUsageInfo } from '../utils/links';
 
-import { SpanLinkDef, SpanLinkFunc, Trace, TraceSpan } from './components';
-import { SpanLinkType } from './components/types/links';
+import { SpanLinkDef, SpanLinkFunc, SpanLinkType } from './components/types/links';
+import { Trace, TraceSpan, TraceSpanReference } from './components/types/trace';
 
 /**
  * This is a factory for the link creator. It returns the function mainly so it can return undefined in which case
@@ -213,7 +214,7 @@ function legacyCreateSpanLinkFactory(
         scopedVars = {
           ...scopedVars,
           __tags: {
-            text: 'Tags',
+            text: t('explore.legacy-create-span-link-factory.text.tags', 'Tags'),
             value: tags,
           },
         };
@@ -244,9 +245,17 @@ function legacyCreateSpanLinkFactory(
 
           links.push({
             href: link.href,
-            title: 'Related logs',
+            title: t('explore.legacy-create-span-link-factory.title.related-logs', 'Related logs'),
             onClick: link.onClick,
-            content: <Icon name="gf-logs" title="Explore the logs for this in split view" />,
+            content: (
+              <Icon
+                name="gf-logs"
+                title={t(
+                  'explore.legacy-create-span-link-factory.title-explore-split',
+                  'Explore the logs for this in split view'
+                )}
+              />
+            ),
             field,
             type: SpanLinkType.Logs,
           });
@@ -281,7 +290,7 @@ function legacyCreateSpanLinkFactory(
         scopedVars = {
           ...scopedVars,
           __tags: {
-            text: 'Tags',
+            text: t('explore.legacy-create-span-link-factory.text.tags', 'Tags'),
             value: getFormattedTags(span, tagsToUse),
           },
         };
@@ -307,7 +316,15 @@ function legacyCreateSpanLinkFactory(
           title: query?.name,
           href: link.href,
           onClick: link.onClick,
-          content: <Icon name="chart-line" title="Explore metrics for this span" />,
+          content: (
+            <Icon
+              name="chart-line"
+              title={t(
+                'explore.legacy-create-span-link-factory.title-explore-metrics-for-this-span',
+                'Explore metrics for this span'
+              )}
+            />
+          ),
           field,
           type: SpanLinkType.Metrics,
         });
@@ -323,11 +340,12 @@ function legacyCreateSpanLinkFactory(
         }
 
         const link = createFocusSpanLink(reference.traceID, reference.spanID);
+        const title = getReferenceTitle(reference);
 
         links!.push({
           href: link.href,
-          title: reference.span ? reference.span.operationName : 'View linked span',
-          content: <Icon name="link" title="View linked span" />,
+          title,
+          content: <Icon name="link" title={title} />,
           onClick: link.onClick,
           field: link.origin,
           type: SpanLinkType.Traces,
@@ -338,11 +356,12 @@ function legacyCreateSpanLinkFactory(
     if (span.subsidiarilyReferencedBy && createFocusSpanLink) {
       for (const reference of span.subsidiarilyReferencedBy) {
         const link = createFocusSpanLink(reference.traceID, reference.spanID);
+        const title = getReferenceTitle(reference);
 
         links!.push({
           href: link.href,
-          title: reference.span ? reference.span.operationName : 'View linked span',
-          content: <Icon name="link" title="View linked span" />,
+          title,
+          content: <Icon name="link" title={title} />,
           onClick: link.onClick,
           field: link.origin,
           type: SpanLinkType.Traces,
@@ -354,9 +373,14 @@ function legacyCreateSpanLinkFactory(
     const feO11yLink = getLinkForFeO11y(span);
     if (feO11yLink) {
       links.push({
-        title: 'Session for this span',
+        title: t('explore.legacy-create-span-link-factory.title.session-for-this-span', 'Session for this span'),
         href: feO11yLink,
-        content: <Icon name="frontend-observability" title="Session for this span" />,
+        content: (
+          <Icon
+            name="frontend-observability"
+            title={t('explore.legacy-create-span-link-factory.title-session-for-this-span', 'Session for this span')}
+          />
+        ),
         field,
         type: SpanLinkType.Session,
       });
@@ -365,6 +389,14 @@ function legacyCreateSpanLinkFactory(
     return links;
   };
 }
+
+const getReferenceTitle = (reference: TraceSpanReference) => {
+  let title = reference.span ? reference.span.operationName : 'View linked span';
+  if (reference.refType === 'EXTERNAL') {
+    title = 'View linked span';
+  }
+  return title;
+};
 
 function getQueryForLoki(
   span: TraceSpan,
@@ -612,7 +644,7 @@ function getTimeRangeFromSpan(
 export function scopedVarsFromTrace(duration: number, name: string, traceId: string): ScopedVars {
   return {
     __trace: {
-      text: 'Trace',
+      text: t('explore.scoped-vars-from-trace.text.trace', 'Trace'),
       value: {
         duration,
         name,
@@ -640,7 +672,7 @@ export function scopedVarsFromSpan(span: TraceSpan): ScopedVars {
 
   return {
     __span: {
-      text: 'Span',
+      text: t('explore.scoped-vars-from-span.text.span', 'Span'),
       value: {
         spanId: span.spanID,
         traceId: span.traceID,
@@ -670,7 +702,7 @@ export function scopedVarsFromTags(
 
     tags = {
       __tags: {
-        text: 'Tags',
+        text: t('explore.scoped-vars-from-tags.text.tags', 'Tags'),
         value: getFormattedTags(span, profileTags),
       },
     };
