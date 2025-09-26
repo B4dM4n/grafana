@@ -24,6 +24,7 @@ import { enrichHelpItem } from '../MegaMenu/utils';
 import { NavToolbarSeparator } from '../NavToolbar/NavToolbarSeparator';
 import { QuickAdd } from '../QuickAdd/QuickAdd';
 
+import { InviteUserButton } from './InviteUserButton';
 import { ProfileButton } from './ProfileButton';
 import { SignInLink } from './SignInLink';
 import { SingleTopBarActions } from './SingleTopBarActions';
@@ -103,9 +104,10 @@ export const SingleTopBar = memo(function SingleTopBar({
             </Dropdown>
           )}
           <NavToolbarSeparator />
-          {config.featureToggles.extensionSidebar && !isSmallScreen && <ExtensionToolbarItem />}
+          {!isSmallScreen && <ExtensionToolbarItem compact={isSmallScreen} />}
           {!showToolbarLevel && actions}
           {!contextSrv.user.isSignedIn && <SignInLink />}
+          <InviteUserButton />
           {profileNode && <ProfileButton profileNode={profileNode} onToggleKioskMode={onToggleKioskMode} />}
         </Stack>
       </div>

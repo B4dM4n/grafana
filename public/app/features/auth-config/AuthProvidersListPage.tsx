@@ -46,7 +46,6 @@ export const AuthConfigPageUnconnected = ({
   }, [loadSettings]);
 
   const [showDrawer, setShowDrawer] = useState(false);
-
   const authProviders = getRegisteredAuthProviders();
   const availableProviders = authProviders.filter((p) => !providerStatuses[p.id]?.hide);
   const onProviderCardClick = (providerType: string, enabled: boolean) => {

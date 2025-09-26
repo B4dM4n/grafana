@@ -58,6 +58,7 @@ var (
 	signout_redirect_url = test_signout_redirect_url
 	org_attribute_path = groups
 	org_mapping = Group1:*:Editor
+	login_prompt = select_account
 	`
 
 	expectedOAuthInfo = map[string]any{
@@ -105,6 +106,7 @@ var (
 		"org_attribute_path":            "groups",
 		"org_role_attribute_path":       "",
 		"org_mapping":                   "Group1:*:Editor",
+		"login_prompt":                  "select_account",
 	}
 )
 
@@ -129,6 +131,7 @@ func TestGetProviderConfig_ExtraFields(t *testing.T) {
 	force_use_graph_api = true
 	allowed_organizations = org1, org2
 	workload_identity_token_file = azuread_token_file
+	domain_hint = my-domain
 
 	[auth.github]
 	team_ids = first, second
@@ -164,6 +167,7 @@ func TestGetProviderConfig_ExtraFields(t *testing.T) {
 		require.Equal(t, true, result["force_use_graph_api"])
 		require.Equal(t, "org1, org2", result["allowed_organizations"])
 		require.Equal(t, "azuread_token_file", result["workload_identity_token_file"])
+		require.Equal(t, "my-domain", result["domain_hint"])
 	})
 
 	t.Run(social.GitHubProviderName, func(t *testing.T) {

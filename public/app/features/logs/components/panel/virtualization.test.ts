@@ -67,6 +67,18 @@ describe('Virtualization', () => {
       expect(size).toBe(SINGLE_LINE_HEIGHT + DETAILS_HEIGHT);
     });
 
+    test('Should not throw when an undefined index is passed', () => {
+      const size = getLogLineSize(
+        virtualization,
+        [log],
+        container,
+        [],
+        { ...defaultOptions, showTime: true, showDetails: [log], detailsMode: 'inline' },
+        1 // Index out of bounds
+      );
+      expect(size).toBe(SINGLE_LINE_HEIGHT);
+    });
+
     test('Returns the a single line if the line is not loaded yet', () => {
       const logs = [log];
       const size = getLogLineSize(
@@ -270,7 +282,7 @@ describe('Virtualization', () => {
 
   describe('calculateFieldDimensions', () => {
     test('Measures displayed fields including the log line body', () => {
-      expect(virtualization.calculateFieldDimensions([log], ['place', LOG_LINE_BODY_FIELD_NAME])).toEqual([
+      expect(virtualization.calculateFieldDimensions([log], ['place', LOG_LINE_BODY_FIELD_NAME], 'ms')).toEqual([
         {
           field: 'timestamp',
           width: 23,
@@ -286,6 +298,19 @@ describe('Virtualization', () => {
         {
           field: '___LOG_LINE_BODY___',
           width: 13,
+        },
+      ]);
+    });
+
+    test('Measures nanosecond timestamps', () => {
+      expect(virtualization.calculateFieldDimensions([log], [], 'ns')).toEqual([
+        {
+          field: 'timestamp',
+          width: 29,
+        },
+        {
+          field: 'level',
+          width: 4,
         },
       ]);
     });

@@ -86,7 +86,7 @@ func NewSpec() *Spec {
 		Editable:             (func(input bool) *bool { return &input })(true),
 		GraphTooltip:         (func(input DashboardCursorSync) *DashboardCursorSync { return &input })(DashboardCursorSyncOff),
 		FiscalYearStartMonth: (func(input uint8) *uint8 { return &input })(0),
-		SchemaVersion:        41,
+		SchemaVersion:        42,
 	}
 }
 
@@ -725,6 +725,10 @@ type VariableModel struct {
 	// Optional field, if you want to extract part of a series name or metric node segment.
 	// Named capture groups can be used to separate the display text and value.
 	Regex *string `json:"regex,omitempty"`
+	// Additional static options for query variable
+	StaticOptions []VariableOption `json:"staticOptions,omitempty"`
+	// Ordering of static options in relation to options returned from data source for query variable
+	StaticOptionsOrder *VariableModelStaticOptionsOrder `json:"staticOptionsOrder,omitempty"`
 }
 
 // NewVariableModel creates a new VariableModel object.
@@ -762,13 +766,14 @@ const (
 )
 
 // Determine if the variable shows on dashboard
-// Accepted values are 0 (show label and value), 1 (show value only), 2 (show nothing).
+// Accepted values are 0 (show label and value), 1 (show value only), 2 (show nothing), 3 (show under the controls dropdown menu).
 type VariableHide int64
 
 const (
-	VariableHideDontHide     VariableHide = 0
-	VariableHideHideLabel    VariableHide = 1
-	VariableHideHideVariable VariableHide = 2
+	VariableHideDontHide       VariableHide = 0
+	VariableHideHideLabel      VariableHide = 1
+	VariableHideHideVariable   VariableHide = 2
+	VariableHideInControlsMenu VariableHide = 3
 )
 
 // Option to be selected in a variable.
@@ -1043,6 +1048,14 @@ const (
 	DataTransformerConfigTopicSeries      DataTransformerConfigTopic = "series"
 	DataTransformerConfigTopicAnnotations DataTransformerConfigTopic = "annotations"
 	DataTransformerConfigTopicAlertStates DataTransformerConfigTopic = "alertStates"
+)
+
+type VariableModelStaticOptionsOrder string
+
+const (
+	VariableModelStaticOptionsOrderBefore VariableModelStaticOptionsOrder = "before"
+	VariableModelStaticOptionsOrderAfter  VariableModelStaticOptionsOrder = "after"
+	VariableModelStaticOptionsOrderSorted VariableModelStaticOptionsOrder = "sorted"
 )
 
 type ValueMapOrRangeMapOrRegexMapOrSpecialValueMap struct {

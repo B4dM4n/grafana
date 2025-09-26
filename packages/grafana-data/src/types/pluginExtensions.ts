@@ -174,6 +174,11 @@ export type PluginExtensionEventHelpers<Context extends object = object> = {
    * @param props The props to be passed to the component.
    */
   openSidebar: (componentTitle: string, props?: Record<string, unknown>) => void;
+  /**
+   * @internal
+   * Closes the extension sidebar.
+   */
+  closeSidebar: () => void;
 };
 
 // Extension Points & Contexts
@@ -185,16 +190,27 @@ export enum PluginExtensionPoints {
   AlertingHomePage = 'grafana/alerting/home',
   AlertingAlertingRuleAction = 'grafana/alerting/alertingrule/action',
   AlertingRecordingRuleAction = 'grafana/alerting/recordingrule/action',
+  AlertingRuleQueryEditor = 'grafana/alerting/alertingrule/queryeditor',
   CommandPalette = 'grafana/commandpalette/action',
   DashboardPanelMenu = 'grafana/dashboard/panel/menu',
   DataSourceConfig = 'grafana/datasources/config',
+  DataSourceConfigActions = 'grafana/datasources/config/actions',
+  DataSourceConfigErrorStatus = 'grafana/datasources/config/error-status',
+  DataSourceConfigStatus = 'grafana/datasources/config/status',
   ExploreToolbarAction = 'grafana/explore/toolbar/action',
   UserProfileTab = 'grafana/user/profile/tab',
   TraceViewDetails = 'grafana/traceview/details',
+  TraceViewHeaderActions = 'grafana/traceview/header/actions',
   QueryEditorRowAdaptiveTelemetryV1 = 'grafana/query-editor-row/adaptivetelemetry/v1',
   TraceViewResourceAttributes = 'grafana/traceview/resource-attributes',
   LogsViewResourceAttributes = 'grafana/logsview/resource-attributes',
   AppChrome = 'grafana/app/chrome/v1',
+  ExtensionSidebar = 'grafana/extension-sidebar/v0-alpha',
+}
+
+// Extension Points available in plugins
+export enum PluginExtensionExposedComponents {
+  CentralAlertHistorySceneV1 = 'grafana/central-alert-history-scene/v1',
 }
 
 export type PluginExtensionPanelContext = {
@@ -207,6 +223,13 @@ export type PluginExtensionPanelContext = {
   targets: DataQuery[];
   scopedVars?: ScopedVars;
   data?: PanelData;
+};
+
+export type CentralAlertHistorySceneV1Props = {
+  defaultLabelsFilter?: string;
+  defaultTimeRange?: { from: string; to: string };
+  hideFilters?: boolean;
+  hideAlertRuleColumn?: boolean;
 };
 
 export type PluginExtensionQueryEditorRowAdaptiveTelemetryV1Context = {
@@ -242,10 +265,48 @@ export type PluginExtensionCommandPaletteContext = {};
 export type PluginExtensionResourceAttributesContext = {
   // Key-value pairs of resource attributes, attribute name is the key
   attributes: Record<string, string[]>;
+  spanAttributes?: Record<string, string[]>;
   datasource: {
     type: string;
     uid: string;
   };
+};
+
+export type DataSourceConfigErrorStatusContext = {
+  dataSource: {
+    type: string;
+    uid: string;
+    name: string;
+  };
+  testingStatus: {
+    message?: string | null;
+    status?: string | null;
+    details?: Record<string, unknown>;
+  };
+};
+
+export type PluginExtensionDataSourceConfigActionsContext = {
+  dataSource: {
+    type: string;
+    uid: string;
+    name: string;
+    typeName: string;
+  };
+};
+
+export type PluginExtensionDataSourceConfigStatusContext = {
+  dataSource: {
+    type: string;
+    uid: string;
+    name: string;
+    typeName: string;
+  };
+  testingStatus?: {
+    message?: string | null;
+    status?: string | null;
+    details?: Record<string, unknown>;
+  };
+  severity: 'success' | 'error' | 'warning' | 'info';
 };
 
 type Dashboard = {

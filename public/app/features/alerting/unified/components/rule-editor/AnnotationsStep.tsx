@@ -9,6 +9,7 @@ import { Trans, t } from '@grafana/i18n';
 import { Button, Field, Input, Stack, Text, TextArea, useStyles2 } from '@grafana/ui';
 
 import { DashboardModel } from '../../../../dashboard/state/DashboardModel';
+import { AIImproveAnnotationsButtonComponent } from '../../enterprise-components/AI/AIGenImproveAnnotationsButton/addAIImproveAnnotationsButton';
 import { RuleFormValues } from '../../types/rule-form';
 import { Annotation, annotationLabels } from '../../utils/constants';
 import { isGrafanaManagedRuleByType } from '../../utils/rules';
@@ -18,6 +19,7 @@ import DashboardAnnotationField from './DashboardAnnotationField';
 import { DashboardPicker, PanelDTO, getVisualPanels } from './DashboardPicker';
 import { NeedHelpInfo } from './NeedHelpInfo';
 import { RuleEditorSection } from './RuleEditorSection';
+import { NotificationMessageSectionExtension } from './alert-rule-form/extensions/NotificationMessageSectionExtension';
 import { useDashboardQuery } from './useDashboardQuery';
 
 const AnnotationsStep = () => {
@@ -138,6 +140,7 @@ const AnnotationsStep = () => {
       fullWidth
     >
       <Stack direction="column" gap={1}>
+        {isGrafanaManagedRuleByType(type) && <AIImproveAnnotationsButtonComponent />}
         {fields.map((annotationField, index: number) => {
           const isUrl = annotations[index]?.key?.toLocaleLowerCase().endsWith('url');
           const ValueInputComponent = isUrl ? Input : TextArea;
@@ -163,50 +166,48 @@ const AnnotationsStep = () => {
                     onDeleteClick={handleDeleteDashboardAnnotation}
                   />
                 )}
-
-                {
-                  <div className={styles.annotationValueContainer}>
-                    <Field
-                      hidden={
-                        annotationField.key === Annotation.dashboardUID || annotationField.key === Annotation.panelID
+                <div className={styles.annotationValueContainer}>
+                  <Field
+                    hidden={
+                      annotationField.key === Annotation.dashboardUID || annotationField.key === Annotation.panelID
+                    }
+                    className={cx(styles.flexRowItemMargin, styles.field)}
+                    invalid={!!errors.annotations?.[index]?.value?.message}
+                    error={errors.annotations?.[index]?.value?.message}
+                    noMargin
+                  >
+                    <ValueInputComponent
+                      data-testid={`annotation-value-${index}`}
+                      id={`annotation-${index}`}
+                      className={cx(styles.annotationValueInput, { [styles.textarea]: !isUrl })}
+                      {...register(`annotations.${index}.value`)}
+                      placeholder={
+                        isUrl
+                          ? // eslint-disable-next-line @grafana/i18n/no-untranslated-strings
+                            'https://'
+                          : (annotationField.key &&
+                              t('alerting.annotations-step.placeholder-value-input', 'Enter a {{key}}...', {
+                                key: annotationField.key,
+                              })) ||
+                            t(
+                              'alerting.annotations-step.placeholder-value-input-default',
+                              'Enter custom annotation content...'
+                            )
                       }
-                      className={cx(styles.flexRowItemMargin, styles.field)}
-                      invalid={!!errors.annotations?.[index]?.value?.message}
-                      error={errors.annotations?.[index]?.value?.message}
-                    >
-                      <ValueInputComponent
-                        data-testid={`annotation-value-${index}`}
-                        id={`annotation-${index}`}
-                        className={cx(styles.annotationValueInput, { [styles.textarea]: !isUrl })}
-                        {...register(`annotations.${index}.value`)}
-                        placeholder={
-                          isUrl
-                            ? // eslint-disable-next-line @grafana/i18n/no-untranslated-strings
-                              'https://'
-                            : (annotationField.key &&
-                                t('alerting.annotations-step.placeholder-value-input', 'Enter a {{key}}...', {
-                                  key: annotationField.key,
-                                })) ||
-                              t(
-                                'alerting.annotations-step.placeholder-value-input-default',
-                                'Enter custom annotation content...'
-                              )
-                        }
-                        defaultValue={annotationField.value}
-                      />
-                    </Field>
-                    {!annotationLabels[annotation] && (
-                      <Button
-                        type="button"
-                        className={styles.deleteAnnotationButton}
-                        aria-label={t('alerting.annotations-step.aria-label-delete-annotation', 'delete annotation')}
-                        icon="trash-alt"
-                        variant="secondary"
-                        onClick={() => remove(index)}
-                      />
-                    )}
-                  </div>
-                }
+                      defaultValue={annotationField.value}
+                    />
+                  </Field>
+                  {!annotationLabels[annotation] && (
+                    <Button
+                      type="button"
+                      className={styles.deleteAnnotationButton}
+                      aria-label={t('alerting.annotations-step.aria-label-delete-annotation', 'delete annotation')}
+                      icon="trash-alt"
+                      variant="secondary"
+                      onClick={() => remove(index)}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -239,6 +240,7 @@ const AnnotationsStep = () => {
             onDismiss={() => setShowPanelSelector(false)}
           />
         )}
+        <NotificationMessageSectionExtension />
       </Stack>
     </RuleEditorSection>
   );
