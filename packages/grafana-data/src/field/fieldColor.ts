@@ -76,6 +76,20 @@ export const fieldColorModeRegistry = new Registry<FieldColorMode>(() => {
       },
     }),
     new FieldColorSchemeMode({
+      id: FieldColorModeId.PaletteClassicByLabel,
+      name: 'Classic palette (by color label)',
+      isContinuous: false,
+      isByValue: false,
+      useColorLabel: true,
+      getColors: (theme: GrafanaTheme2) => {
+        return theme.visualization.palette.filter(
+          (color) =>
+            getContrastRatio(theme.visualization.getColorByName(color), theme.colors.background.primary) >=
+            theme.colors.contrastThreshold
+        );
+      },
+    }),
+    new FieldColorSchemeMode({
       id: FieldColorModeId.ContinuousGrYlRd,
       name: 'Green-Yellow-Red',
       isContinuous: true,
@@ -156,6 +170,7 @@ interface FieldColorSchemeModeOptions {
   isContinuous: boolean;
   isByValue: boolean;
   useSeriesName?: boolean;
+  useColorLabel?: boolean;
 }
 
 export class FieldColorSchemeMode implements FieldColorMode {
@@ -165,6 +180,7 @@ export class FieldColorSchemeMode implements FieldColorMode {
   isContinuous: boolean;
   isByValue: boolean;
   useSeriesName?: boolean;
+  useColorLabel?: boolean;
   colorCache?: string[];
   colorCacheTheme?: GrafanaTheme2;
   interpolator?: (value: number) => string;
@@ -178,6 +194,7 @@ export class FieldColorSchemeMode implements FieldColorMode {
     this.isContinuous = options.isContinuous;
     this.isByValue = options.isByValue;
     this.useSeriesName = options.useSeriesName;
+    this.useColorLabel = options.useColorLabel;
   }
 
   getColors(theme: GrafanaTheme2): string[] {
@@ -219,6 +236,10 @@ export class FieldColorSchemeMode implements FieldColorMode {
     } else if (this.useSeriesName) {
       return (_: number, _percent: number, _threshold?: Threshold) => {
         return getColorByStringHash(colors, field.state?.displayName ?? field.name);
+      };
+    } else if (this.useColorLabel) {
+      return (_: number, _percent: number, _threshold?: Threshold) => {
+        return getColorByStringHash(colors, field.labels?.color ?? field.state?.displayName ?? field.name);
       };
     } else {
       return (_: number, _percent: number, _threshold?: Threshold) => {
