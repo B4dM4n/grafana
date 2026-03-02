@@ -9,11 +9,12 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/grafana/grafana/pkg/api/response"
 	"github.com/grafana/grafana/pkg/apimachinery/errutil"
-	"github.com/grafana/grafana/pkg/apimachinery/identity"
 	"github.com/grafana/grafana/pkg/infra/metrics"
+	"github.com/grafana/grafana/pkg/infra/metrics/metricutil"
 	"github.com/grafana/grafana/pkg/infra/network"
 	"github.com/grafana/grafana/pkg/middleware"
 	"github.com/grafana/grafana/pkg/middleware/cookies"
@@ -22,7 +23,6 @@ import (
 	contextmodel "github.com/grafana/grafana/pkg/services/contexthandler/model"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	loginservice "github.com/grafana/grafana/pkg/services/login"
-	pref "github.com/grafana/grafana/pkg/services/preference"
 	"github.com/grafana/grafana/pkg/services/secrets"
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/setting"
@@ -51,35 +51,34 @@ var (
 	errForbiddenRedirectTo = errors.New("forbidden redirect_to cookie value")
 )
 
-func (hs *HTTPServer) ValidateRedirectTo(redirectTo string) error {
+func (hs *HTTPServer) ValidateRedirectTo(redirectTo string) (string, error) {
 	to, err := url.Parse(redirectTo)
 	if err != nil {
-		return errInvalidRedirectTo
+		return "", errInvalidRedirectTo
 	}
 
 	if to.IsAbs() {
-		return errAbsoluteRedirectTo
+		return "", errAbsoluteRedirectTo
 	}
 
 	if to.Host != "" {
-		return errForbiddenRedirectTo
+		return "", errForbiddenRedirectTo
 	}
 
-	if redirectDenyRe.MatchString(to.Path) {
-		return errForbiddenRedirectTo
+	if redirectDenyRe.MatchString(to.Path) || redirectDenyRe.MatchString(to.Fragment) {
+		return "", errForbiddenRedirectTo
 	}
 
 	if to.Path != "/" && !redirectAllowRe.MatchString(to.Path) {
-		return errForbiddenRedirectTo
+		return "", errForbiddenRedirectTo
 	}
 
 	// when using a subUrl, the redirect_to should start with the subUrl (which contains the leading slash), otherwise the redirect
 	// will send the user to the wrong location
 	if hs.Cfg.AppSubURL != "" && !strings.HasPrefix(to.Path, hs.Cfg.AppSubURL+"/") {
-		return errInvalidRedirectTo
+		return "", errInvalidRedirectTo
 	}
-
-	return nil
+	return to.String(), nil
 }
 
 func (hs *HTTPServer) CookieOptionsFromCfg() cookies.CookieOptions {
@@ -101,6 +100,10 @@ func (hs *HTTPServer) LoginView(c *contextmodel.ReqContext) {
 		return
 	}
 
+	start := time.Now()
+	defer func() {
+		metricutil.ObserveWithExemplar(c.Req.Context(), hs.htmlHandlerRequestsDuration.WithLabelValues("login"), time.Since(start).Seconds())
+	}()
 	viewData, err := setIndexViewData(hs, c)
 	if err != nil {
 		c.Handle(hs.Cfg, http.StatusInternalServerError, "Failed to get settings", err)
@@ -354,29 +357,8 @@ func (hs *HTTPServer) RedirectResponseWithError(c *contextmodel.ReqContext, err 
 }
 
 func (hs *HTTPServer) redirectURLWithErrorCookie(c *contextmodel.ReqContext, err error) string {
-	setCookie := true
-	if hs.Features.IsEnabled(c.Req.Context(), featuremgmt.FlagIndividualCookiePreferences) {
-		var userID int64
-		if c.SignedInUser != nil && !c.IsNil() {
-			var errID error
-			userID, errID = identity.UserIdentifier(c.GetID())
-			if errID != nil {
-				hs.log.Error("failed to retrieve user ID", "error", errID)
-			}
-		}
-
-		prefsQuery := pref.GetPreferenceWithDefaultsQuery{UserID: userID, OrgID: c.GetOrgID(), Teams: c.Teams}
-		prefs, err := hs.preferenceService.GetWithDefaults(c.Req.Context(), &prefsQuery)
-		if err != nil {
-			c.Redirect(hs.Cfg.AppSubURL + "/login")
-		}
-		setCookie = prefs.Cookies("functional")
-	}
-
-	if setCookie {
-		if err := hs.trySetEncryptedCookie(c, loginErrorCookieName, getLoginExternalError(err), 60); err != nil {
-			hs.log.Error("Failed to set encrypted cookie", "err", err)
-		}
+	if err := hs.trySetEncryptedCookie(c, loginErrorCookieName, getLoginExternalError(err), 60); err != nil {
+		hs.log.Error("Failed to set encrypted cookie", "err", err)
 	}
 
 	return hs.Cfg.AppSubURL + "/login"

@@ -300,11 +300,28 @@ const (
 	LogsQueryLanguagePPL  LogsQueryLanguage = "PPL"
 )
 
+// Log group selection scope - determines how log groups are selected for the query
+type LogsQueryScope string
+
+const (
+	LogsQueryScopeLogGroupName LogsQueryScope = "logGroupName"
+	LogsQueryScopeNamePrefix   LogsQueryScope = "namePrefix"
+	LogsQueryScopeAllLogGroups LogsQueryScope = "allLogGroups"
+)
+
+// Log group class filter
+type LogGroupClass string
+
+const (
+	LogGroupClassSTANDARD         LogGroupClass = "STANDARD"
+	LogGroupClassINFREQUENTACCESS LogGroupClass = "INFREQUENT_ACCESS"
+)
+
 // Shape of a CloudWatch Logs query
 type CloudWatchLogsQuery struct {
 	// Whether a query is a Metrics, Logs, or Annotations query
 	QueryMode CloudWatchQueryMode `json:"queryMode"`
-	// Whether a query is a Logs Insights or Logs Anomalies query
+	// Whether a query is a Logs Insights or Log Anomalies query
 	LogsMode *LogsMode `json:"logsMode,omitempty"`
 	Id       string    `json:"id"`
 	// AWS region to query for the logs
@@ -317,6 +334,14 @@ type CloudWatchLogsQuery struct {
 	LogGroups []LogGroup `json:"logGroups,omitempty"`
 	// @deprecated use logGroups
 	LogGroupNames []string `json:"logGroupNames,omitempty"`
+	// Language used for querying logs, can be CWLI, SQL, or PPL. If empty, the default language is CWLI.
+	QueryLanguage *LogsQueryLanguage `json:"queryLanguage,omitempty"`
+	// Log group selection scope - determines how log groups are selected for the query
+	LogsQueryScope *LogsQueryScope `json:"logsQueryScope,omitempty"`
+	// Log group name prefixes for namePrefix scope mode (max 5)
+	LogGroupPrefixes []string `json:"logGroupPrefixes,omitempty"`
+	// Log group class filter for namePrefix and allLogGroups scope modes
+	LogGroupClass *LogGroupClass `json:"logGroupClass,omitempty"`
 	// A unique identifier for the query within the list of targets.
 	// In server side expressions, the refId is used as a variable name to identify results.
 	// By default, the UI will assign A->Z; however setting meaningful names may be useful.
@@ -326,8 +351,8 @@ type CloudWatchLogsQuery struct {
 	// Specify the query flavor
 	// TODO make this required and give it a default
 	QueryType *string `json:"queryType,omitempty"`
-	// Language used for querying logs, can be CWLI, SQL, or PPL. If empty, the default language is CWLI.
-	QueryLanguage *LogsQueryLanguage `json:"queryLanguage,omitempty"`
+	// Selected account IDs for cross-account queries (max 20)
+	SelectedAccountIds []string `json:"selectedAccountIds,omitempty"`
 	// For mixed data sources the selected datasource is on the query level.
 	// For non mixed scenarios this is undefined.
 	// TODO find a better way to do this ^ that's friendly to schema
@@ -356,14 +381,14 @@ func NewLogGroup() *LogGroup {
 	return &LogGroup{}
 }
 
-// Shape of a Cloudwatch Logs Anomalies query
+// Shape of a Cloudwatch Log Anomalies query
 type CloudWatchLogsAnomaliesQuery struct {
 	Id string `json:"id"`
 	// AWS region to query for the logs
 	Region string `json:"region"`
 	// Whether a query is a Metrics, Logs or Annotations query
 	QueryMode *CloudWatchQueryMode `json:"queryMode,omitempty"`
-	// Whether a query is a Logs Insights or Logs Anomalies query
+	// Whether a query is a Logs Insights or Log Anomalies query
 	LogsMode *LogsMode `json:"logsMode,omitempty"`
 	// Filter to return only anomalies that are 'SUPPRESSED', 'UNSUPPRESSED', or 'ALL' (default)
 	SuppressionState *string `json:"suppressionState,omitempty"`

@@ -36,6 +36,11 @@ var (
 		msgAlertmanagerMultipleExtraConfigsUnsupported,
 		errutil.WithPublic(msgAlertmanagerMultipleExtraConfigsUnsupported),
 	)
+
+	ErrIdentifierAlreadyExists = errutil.BadRequest("alerting.notifications.alertmanager.identifierAlreadyExists").MustTemplate("identifier [{{ .Public.Identifier }}] already used by existing managed routes",
+		errutil.WithPublic(
+			"Identifier [{{ .Public.Identifier }}] is already used by existing managed routes. Use another identifier or delete the existing route.",
+		))
 )
 
 type UnknownReceiverError struct {
@@ -333,7 +338,7 @@ func (moa *MultiOrgAlertmanager) SaveAndApplyAlertmanagerConfiguration(ctx conte
 		config.ExtraConfigs = extraConfigs
 	}
 
-	if err := moa.Crypto.ProcessSecureSettings(ctx, org, config.AlertmanagerConfig.Receivers); err != nil {
+	if err := moa.Crypto.ProcessSecureSettings(ctx, org, config.AlertmanagerConfig.Receivers, nil); err != nil {
 		return fmt.Errorf("failed to post process Alertmanager configuration: %w", err)
 	}
 
@@ -400,6 +405,14 @@ func (moa *MultiOrgAlertmanager) modifyAndApplyExtraConfiguration(
 	cfg.ExtraConfigs, err = modifyFn(cfg.ExtraConfigs)
 	if err != nil {
 		return fmt.Errorf("failed to apply extra configuration: %w", err)
+	}
+
+	if len(cfg.ManagedRoutes) > 0 {
+		for _, c := range cfg.ExtraConfigs {
+			if _, ok := cfg.ManagedRoutes[c.Identifier]; ok {
+				return ErrIdentifierAlreadyExists.Build(errutil.TemplateData{Public: map[string]interface{}{"Identifier": c.Identifier}})
+			}
+		}
 	}
 
 	am, err := moa.AlertmanagerFor(org)
@@ -485,6 +498,7 @@ func assignReceiverConfigsUIDs(c []*definitions.PostableApiReceiver) error {
 type provisioningStore interface {
 	GetProvenance(ctx context.Context, o models.Provisionable, org int64) (models.Provenance, error)
 	GetProvenances(ctx context.Context, org int64, resourceType string) (map[string]models.Provenance, error)
+	GetProvenancesByUIDs(ctx context.Context, org int64, resourceType string, uids []string) (map[string]models.Provenance, error)
 	SetProvenance(ctx context.Context, o models.Provisionable, org int64, p models.Provenance) error
 	DeleteProvenance(ctx context.Context, o models.Provisionable, org int64) error
 }

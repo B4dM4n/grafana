@@ -31,6 +31,7 @@ const commonTestIgnores = [
   '**/*.mock.{ts,tsx}',
   '**/{test-helpers,testHelpers}.{ts,tsx}',
   '**/{spec,test-helpers}/**/*.{ts,tsx}',
+  'packages/grafana-test-utils/src/**/*.{ts,tsx}',
 ];
 
 const generatedFiles = ['**/*.gen.ts', '**/*_gen.ts'];
@@ -87,6 +88,14 @@ function withBaseRestrictedImportsConfig(config = {}) {
   return finalConfig;
 }
 
+const datavizDefaultImportsRestrictions = [
+  {
+    group: ['@emotion/css'],
+    importNames: ['cx'],
+    message: 'Do not use "cx" from @emotion/css. Instead, use `clsx` and compose together only strings.',
+  },
+];
+
 /**
  * @type {Array<import('eslint').Linter.Config>}
  */
@@ -117,6 +126,8 @@ module.exports = [
       'scripts/grafana-server/tmp',
       'packages/grafana-ui/src/graveyard', // deprecated UI components slated for removal
       'public/build-swagger', // swagger build output
+      'apps/plugins/plugin/src/generated/meta/v0alpha1',
+      'apps/plugins/plugin/src/generated/plugin/v0alpha1',
     ],
   },
   ...grafanaConfig,
@@ -132,6 +143,7 @@ module.exports = [
       reportUnusedDisableDirectives: false,
     },
     files: ['**/*.{ts,tsx,js}'],
+    ignores: ['packages/grafana-ui/src/components/Forms/Legacy/**'],
     plugins: {
       '@emotion': emotionPlugin,
       lodash: lodashPlugin,
@@ -254,6 +266,9 @@ module.exports = [
     name: 'grafana/jsx-a11y-overrides',
     files: ['**/*.tsx'],
     ignores: ['**/*.{spec,test}.tsx'],
+    plugins: {
+      'jsx-a11y': jsxA11yPlugin,
+    },
     rules: {
       ...jsxA11yPlugin.configs.recommended.rules,
       'jsx-a11y/no-autofocus': [
@@ -278,6 +293,9 @@ module.exports = [
     name: 'grafana/packages',
     files: ['packages/**/*.{ts,tsx}'],
     ignores: [],
+    plugins: {
+      import: importPlugin,
+    },
     rules: {
       'import/no-extraneous-dependencies': ['error', { includeInternal: true }],
       'no-restricted-imports': [
@@ -378,6 +396,7 @@ module.exports = [
     plugins: {
       'testing-library': testingLibraryPlugin,
       'jest-dom': jestDomPlugin,
+      jest: jestPlugin,
     },
     files: [
       'public/app/features/alerting/**/__tests__/**/*.[jt]s?(x)',
@@ -434,6 +453,7 @@ module.exports = [
       'public/app/plugins/datasource/loki/**/*.{ts,tsx}',
       'public/app/plugins/datasource/loki/**/*.{ts,tsx}',
       'public/app/plugins/datasource/mysql/**/*.{ts,tsx}',
+      'public/app/plugins/datasource/opentsdb/**/*.{ts,tsx}',
       'public/app/plugins/datasource/parca/**/*.{ts,tsx}',
       'public/app/plugins/datasource/tempo/**/*.{ts,tsx}',
       'public/app/plugins/datasource/zipkin/**/*.{ts,tsx}',
@@ -467,12 +487,40 @@ module.exports = [
 
   {
     // custom rule for Table to avoid performance regressions
+    files: ['packages/grafana-ui/src/components/Table/TableNG/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        withBaseRestrictedImportsConfig({
+          patterns: [
+            ...datavizDefaultImportsRestrictions,
+            {
+              group: ['@grafana/data'],
+              importNames: ['getFieldDisplayName'],
+              message:
+                'Using the method inside Table can have performance implications which are unnecessary. Instead, use the local `getDisplayName` from the table utils.',
+            },
+          ],
+        }),
+      ],
+    },
+  },
+
+  {
+    // custom rule for Table to avoid performance regressions
     files: ['packages/grafana-ui/src/components/Table/TableNG/Cells/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
         withBaseRestrictedImportsConfig({
           patterns: [
+            ...datavizDefaultImportsRestrictions,
+            {
+              group: ['@grafana/data'],
+              importNames: ['getFieldDisplayName'],
+              message:
+                'Using the method inside Table can have performance implications which are unnecessary. Instead, use the local `getDisplayName` from the table utils.',
+            },
             {
               group: ['**/themes/ThemeContext'],
               importNames: ['useStyles2', 'useTheme2'],
@@ -485,20 +533,14 @@ module.exports = [
     },
   },
 
-  // dataviz prefers to use `clsx` over `cx` to compose classes as a rule for performance reasons
+  // other dataviz panels which should just get our default set of restrictions
   {
     files: ['public/app/plugins/panel/state-timeline/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
         withBaseRestrictedImportsConfig({
-          patterns: [
-            {
-              group: ['@emotion/css'],
-              importNames: ['cx'],
-              message: 'Do not use "cx" from @emotion/css. Instead, use `clsx` and compose together only strings.',
-            },
-          ],
+          patterns: [...datavizDefaultImportsRestrictions],
         }),
       ],
     },
@@ -507,10 +549,12 @@ module.exports = [
   // Old betterer rules config:
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
-    ignores:
+    ignores: [
       // FIXME: Remove once all enterprise issues are fixed -
       // we don't have a suppressions file/approach for enterprise code yet
-      enterpriseIgnores,
+      ...enterpriseIgnores,
+      'packages/grafana-ui/src/components/Forms/Legacy/**',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@grafana/no-aria-label-selectors': 'error',
@@ -560,10 +604,58 @@ module.exports = [
           message: 'gf-form usage has been deprecated. Use a component from @grafana/ui or custom CSS instead.',
         },
         {
-          selector:
-            "Property[key.name='a11y'][value.type='ObjectExpression'] Property[key.name='test'][value.value='off']",
-          message: 'Skipping a11y tests is not allowed. Please fix the component or story instead.',
+          selector: 'MemberExpression[object.name="config"][property.name="apps"]',
+          message:
+            'Usage of config.apps is not allowed. Use the function getAppPluginMetas or useAppPluginMetas from @grafana/runtime/internal instead',
         },
+        {
+          selector: 'MemberExpression[object.name="config"][property.name="panels"]',
+          message:
+            'Usage of config.panels is not allowed. Use the function getPanelPluginMetas or usePanelPluginMetas from @grafana/runtime/internal instead',
+        },
+      ],
+    },
+  },
+  {
+    files: [...commonTestIgnores],
+    ignores: [
+      // FIXME: Remove once all enterprise issues are fixed -
+      // we don't have a suppressions file/approach for enterprise code yet
+      ...enterpriseIgnores,
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'MemberExpression[object.name="config"][property.name="apps"]',
+          message:
+            'Usage of config.apps is not allowed. Use the function getAppPluginMetas or useAppPluginMetas from @grafana/runtime/internal instead',
+        },
+        {
+          selector: 'MemberExpression[object.name="config"][property.name="panels"]',
+          message:
+            'Usage of config.panels is not allowed. Use the function getPanelPluginMetas or usePanelPluginMetas from @grafana/runtime/internal instead',
+        },
+      ],
+    },
+  },
+  {
+    files: [...enterpriseIgnores],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'MemberExpression[object.name="config"][property.name="apps"]',
+          message:
+            'Usage of config.apps is not allowed. Use the function getAppPluginMetas or useAppPluginMetas from @grafana/runtime/internal instead',
+        },
+        // FIXME: Remove once all enterprise issues are fixed (reports/dashboard/DashboardReportPage.test.tsx) -
+        // we don't have a suppressions file/approach for enterprise code yet
+        // {
+        //   selector: 'MemberExpression[object.name="config"][property.name="panels"]',
+        //   message:
+        //     'Usage of config.panels is not allowed. Use the function getPanelPluginMetas or usePanelPluginMetas from @grafana/runtime/internal instead',
+        // },
       ],
     },
   },
@@ -574,6 +666,8 @@ module.exports = [
       // FIXME: Remove once all enterprise issues are fixed -
       // we don't have a suppressions file/approach for enterprise code yet
       ...enterpriseIgnores,
+      // Ignore decoupled plugin webpack configs
+      'public/app/**/webpack.config.ts',
     ],
     rules: {
       'no-barrel-files/no-barrel-files': 'error',
@@ -599,4 +693,17 @@ module.exports = [
       ],
     },
   },
+
+  // {
+  //   name: 'grafana/plugin-external-import-paths',
+  //   files: [
+  //     'public/app/plugins/panel/histogram/**/*.{ts,tsx}',
+  //   ],
+  //   plugins: {
+  //     '@grafana': grafanaPlugin,
+  //   },
+  //   rules: {
+  //     '@grafana/no-plugin-external-import-paths': 'error',
+  //   },
+  // },
 ];

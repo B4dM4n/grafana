@@ -17,6 +17,11 @@ export enum FieldColorModeId {
   ContinuousReds = 'continuous-reds',
   ContinuousGreens = 'continuous-greens',
   ContinuousPurples = 'continuous-purples',
+  ContinuousViridis = 'continuous-viridis',
+  ContinuousMagma = 'continuous-magma',
+  ContinuousPlasma = 'continuous-plasma',
+  ContinuousInferno = 'continuous-inferno',
+  ContinuousCividis = 'continuous-cividis',
   Fixed = 'fixed',
   Shades = 'shades',
 }
