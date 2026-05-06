@@ -1,46 +1,54 @@
 import { css } from '@emotion/css';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   CoreApp,
-  DataFrame,
-  FieldConfigSource,
-  GrafanaTheme2,
+  type DataFrame,
+  type FieldConfigSource,
+  type GrafanaTheme2,
   LoadingState,
   LogsSortOrder,
-  PanelData,
-  PanelProps,
+  type PanelData,
+  type PanelProps,
 } from '@grafana/data';
-import type { Options as TableOptions } from '@grafana/schema/dist/esm/raw/composable/table/panelcfg/x/TablePanelCfg_types.gen';
 import { useStyles2 } from '@grafana/ui';
 import { SETTING_KEY_ROOT } from 'app/features/explore/Logs/utils/logs';
 import { getDefaultFieldSelectorWidth } from 'app/features/logs/components/fieldSelector/FieldSelector';
+import { LOG_LINE_BODY_FIELD_NAME } from 'app/features/logs/components/fieldSelector/logFields';
 import { getLogsPanelState } from 'app/features/logs/components/panel/panelState/getLogsPanelState';
 import {
+  DATAPLANE_SEVERITY_NAME,
   LOGS_DATAPLANE_BODY_NAME,
   LOGS_DATAPLANE_TIMESTAMP_NAME,
-  LogsFrame,
+  type LogsFrame,
   parseLogsFrame,
 } from 'app/features/logs/logsFrame';
 import { PanelDataErrorView } from 'app/features/panel/components/PanelDataErrorView';
 
 import { TableNGWrap } from './TableNGWrap';
 import { LogsTableFields } from './fieldSelector/LogsTableFields';
+import { detectLevelField } from './fields/logs';
 import { useExtractFields } from './hooks/useExtractFields';
 import { useOrganizeFields } from './hooks/useOrganizeFields';
 import { copyLogsTableDashboardUrl } from './links/copyDashboardUrl';
 import { getDisplayedFields } from './options/getDisplayedFields';
-import { Options } from './options/types';
-import { defaultOptions, Options as LogsTableOptions } from './panelcfg.gen';
-import { BuildLinkToLogLine, isOnLogsTableOptionsChange, OnLogsTableOptionsChange } from './types';
+import { onSortOrderChange } from './options/onSortOrderChange';
+import { type Options } from './options/types';
+import { type Options as LogsTableOptions } from './panelcfg.gen';
+import { getInitialRowIndex } from './props/getInitialRowIndex';
+import {
+  type BuildLinkToLogLine,
+  isBuildLinkToLogLine,
+  isOnLogsTableOptionsChange,
+  type OnLogsTableOptionsChange,
+} from './types';
 
-interface LogsTablePanelProps extends PanelProps<Options> {}
+interface LogsTablePanelProps extends Omit<PanelProps<Options>, 'timeRange'> {}
 
 export const LogsTable = ({
   data,
   width,
   height,
-  timeRange,
   fieldConfig,
   options,
   eventBus,
@@ -55,7 +63,6 @@ export const LogsTable = ({
   renderCounter,
 }: LogsTablePanelProps) => {
   const frameIndex = options.frameIndex <= data.series.length - 1 ? options.frameIndex : 0;
-  const fieldSelectorWidth = options.fieldSelectorWidth ?? getDefaultFieldSelectorWidth();
   const styles = useStyles2(getStyles, height, width);
 
   const rawTableFrame: DataFrame | null = data.series[frameIndex] ? data.series[frameIndex] : null;
@@ -64,24 +71,27 @@ export const LogsTable = ({
     [rawTableFrame]
   );
   const timeFieldName = logsFrame?.timeField.name ?? LOGS_DATAPLANE_TIMESTAMP_NAME;
+  const levelFieldName = logsFrame?.severityField?.name ?? detectLevelField(logsFrame) ?? DATAPLANE_SEVERITY_NAME;
   const bodyFieldName = logsFrame?.bodyField.name ?? LOGS_DATAPLANE_BODY_NAME;
-  const permalinkedLogId = getLogsPanelState()?.logs?.id ?? undefined;
-  const initialRowIndex = permalinkedLogId
-    ? logsFrame?.idField?.values?.findIndex((id) => id === permalinkedLogId)
-    : undefined;
+  const permalinkedLogId = options.permalinkedLogId ?? getLogsPanelState()?.logs?.id ?? undefined;
+  const initialRowIndex = getInitialRowIndex(permalinkedLogId, logsFrame);
 
   const onLogsTableOptionsChange: OnLogsTableOptionsChange | undefined = isOnLogsTableOptionsChange(onOptionsChange)
     ? onOptionsChange
     : undefined;
 
-  const containerElement = useRef<HTMLDivElement | null>(null);
+  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    setContainerElement(node);
+  }, []);
 
   // Callbacks
   const handleTableOptionsChange = useCallback(
-    (options: TableOptions) => {
-      onLogsTableOptionsChange?.(options);
+    (newOptions: Options) => {
+      const pendingOptions = onSortOrderChange(newOptions, options.sortOrder, timeFieldName);
+      onLogsTableOptionsChange?.(pendingOptions);
     },
-    [onLogsTableOptionsChange]
+    [onLogsTableOptionsChange, options.sortOrder, timeFieldName]
   );
 
   const handleLogsTableOptionsChange = useCallback(
@@ -98,6 +108,32 @@ export const LogsTable = ({
     [handleLogsTableOptionsChange, options]
   );
 
+  const transformDisplayedFields = useCallback(
+    (displayedFields: string[]) => {
+      return displayedFields.map((displayedField) => {
+        if (displayedField === bodyFieldName) {
+          return LOG_LINE_BODY_FIELD_NAME;
+        }
+
+        return displayedField;
+      });
+    },
+    [bodyFieldName]
+  );
+
+  const untransformDisplayedFields = useCallback(
+    (displayedFields: string[]) => {
+      return displayedFields.map((displayedField) => {
+        if (displayedField === LOG_LINE_BODY_FIELD_NAME) {
+          return bodyFieldName;
+        }
+
+        return displayedField;
+      });
+    },
+    [bodyFieldName]
+  );
+
   const handleTableOnFieldConfigChange = useCallback(
     (fieldConfig: FieldConfigSource) => {
       onFieldConfigChange(fieldConfig);
@@ -106,12 +142,15 @@ export const LogsTable = ({
   );
 
   const supportsPermalink = useCallback(() => {
-    return !(
-      data?.request?.app !== CoreApp.Dashboard &&
-      data?.request?.app !== CoreApp.PanelEditor &&
-      data?.request?.app !== CoreApp.PanelViewer
+    return (
+      !!options.buildLinkToLogLine ||
+      !(
+        data?.request?.app !== CoreApp.Dashboard &&
+        data?.request?.app !== CoreApp.PanelEditor &&
+        data?.request?.app !== CoreApp.PanelViewer
+      )
     );
-  }, [data?.request?.app]);
+  }, [data?.request?.app, options.buildLinkToLogLine]);
 
   const onPermalinkClick: BuildLinkToLogLine = useCallback(
     (logId: string) => {
@@ -127,11 +166,13 @@ export const LogsTable = ({
   const { organizedFrame } = useOrganizeFields({
     extractedFrame,
     timeFieldName,
+    levelFieldName,
     bodyFieldName,
     logsFrame,
     supportsPermalink: supportsPermalink(),
-    onPermalinkClick,
+    onPermalinkClick: isBuildLinkToLogLine(options.buildLinkToLogLine) ? options.buildLinkToLogLine : onPermalinkClick,
     options,
+    fieldConfig,
   });
 
   // Build panel data
@@ -145,11 +186,14 @@ export const LogsTable = ({
     return data;
   }, [organizedFrame, data, frameIndex]);
 
+  const noSeries = data.series.length === 0;
+  const noValues = data.series[frameIndex]?.fields?.[0]?.values?.length === 0;
+
+  // Logs frame be null for non logs frames
+  const noLogsFrame = !logsFrame;
+
   // Show no data state if query returns nothing
-  if (
-    (data.series.length === 0 || data.series[frameIndex].fields[0].values.length === 0) &&
-    data.state === LoadingState.Done
-  ) {
+  if ((noSeries || noValues || noLogsFrame) && data.state === LoadingState.Done) {
     return <PanelDataErrorView fieldConfig={fieldConfig} panelId={id} data={data} needsStringField />;
   }
 
@@ -157,32 +201,39 @@ export const LogsTable = ({
   const renderTable = timeFieldName && bodyFieldName && logsFrame && organizedFrame && extractedFrame;
 
   return (
-    <div className={styles.wrapper} ref={containerElement}>
-      {renderTable && containerElement.current && (
+    <div className={styles.wrapper} ref={containerRef}>
+      {renderTable && containerElement && (
         <>
           <LogsTableFields
             tableWidth={width}
             fieldSelectorWidth={options.fieldSelectorWidth}
-            displayedFields={getDisplayedFields(options, timeFieldName, bodyFieldName)}
+            displayedFields={untransformDisplayedFields(getDisplayedFields(options, timeFieldName, levelFieldName))}
             height={height}
             logsFrame={logsFrame}
             timeFieldName={timeFieldName}
+            levelFieldName={levelFieldName}
             bodyFieldName={bodyFieldName}
             dataFrame={extractedFrame}
-            onDisplayedFieldsChange={(displayedFields: string[]) => handleLogsTableOptionChange({ displayedFields })}
+            onDisplayedFieldsChange={(displayedFields: string[]) =>
+              handleLogsTableOptionChange({ displayedFields: transformDisplayedFields(displayedFields) })
+            }
             onFieldSelectorWidthChange={(width: number) => handleLogsTableOptionChange({ fieldSelectorWidth: width })}
           />
 
           <TableNGWrap
-            containerElement={containerElement.current}
+            containerElement={containerElement}
             initialRowIndex={initialRowIndex}
             data={panelData}
             width={width}
             height={height}
             id={id}
-            timeRange={timeRange}
             timeZone={timeZone}
-            options={options}
+            options={{
+              sortOrder: LogsSortOrder.Descending,
+              sortBy: [{ displayName: timeFieldName, desc: true }],
+              fieldSelectorWidth: options.fieldSelectorWidth ?? getDefaultFieldSelectorWidth(),
+              ...options,
+            }}
             transparent={transparent}
             fieldConfig={fieldConfig}
             renderCounter={renderCounter}
@@ -193,8 +244,6 @@ export const LogsTable = ({
             replaceVariables={replaceVariables}
             onChangeTimeRange={onChangeTimeRange}
             logOptionsStorageKey={SETTING_KEY_ROOT}
-            fieldSelectorWidth={fieldSelectorWidth}
-            sortOrder={options.sortOrder ?? defaultOptions.sortOrder ?? LogsSortOrder.Descending}
           />
         </>
       )}
@@ -205,6 +254,8 @@ export const LogsTable = ({
 const getStyles = (theme: GrafanaTheme2, height: number, width: number) => {
   return {
     wrapper: css({
+      // prevent overflow in the tiny suggestions preview
+      overflow: 'hidden',
       height,
       width,
     }),

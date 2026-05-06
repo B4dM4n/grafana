@@ -5,30 +5,31 @@ import * as React from 'react';
 import { isObservable, lastValueFrom } from 'rxjs';
 
 import {
-  AbsoluteTimeRange,
+  type AbsoluteTimeRange,
   CoreApp,
-  DataFrame,
+  type DataFrame,
   DataHoverClearEvent,
   DataHoverEvent,
-  DataQueryResponse,
-  DataSourceApi,
+  type DataQueryResponse,
+  type DataSourceApi,
   dateTimeForTimeZone,
-  GrafanaTheme2,
+  type GrafanaTheme2,
   hasLogsContextSupport,
   hasLogsContextUiSupport,
-  Labels,
-  LogRowContextOptions,
-  LogRowModel,
+  type Labels,
+  type LogRowContextOptions,
+  type LogRowModel,
   LogsSortOrder,
-  PanelData,
-  PanelProps,
-  TimeRange,
-  TimeZone,
+  type PanelData,
+  type PanelProps,
+  type TimeRange,
+  type TimeZone,
   toUtc,
   LogSortOrderChangeEvent,
   LoadingState,
   rangeUtil,
   transformDataFrame,
+  store,
 } from '@grafana/data';
 import { Trans } from '@grafana/i18n';
 import { config, getAppEvents } from '@grafana/runtime';
@@ -51,8 +52,9 @@ import { COMMON_LABELS, dataFrameToLogsModel, dedupLogRows } from '../../../feat
 
 import type { Options } from './panelcfg.gen';
 import {
-  GetFieldLinksFn,
+  type GetFieldLinksFn,
   isCoreApp,
+  isGrammar,
   isIsFilterLabelActive,
   isLogLineMenuCustomItems,
   isOnClickFilterLabel,
@@ -65,7 +67,7 @@ import {
   isOnNewLogsReceivedType,
   isReactNodeArray,
   isSetDisplayedFields,
-  onNewLogsReceivedType,
+  type onNewLogsReceivedType,
 } from './types';
 import { useDatasourcesFromTargets } from './useDatasourcesFromTargets';
 
@@ -135,19 +137,20 @@ interface LogsPanelProps extends PanelProps<Options> {
    * Requires the `otelLogsFormatting`.
    * @alpha
    * showLogAttributes?: boolean
+   *
+   * Custom Prism grammar definition for highlighting. When used, the .prism-syntax-highlight CSS class name is applied to the component, to allow standard token colors to be applied.
+   * grammar?: Grammar
    */
 }
 const noCommonLabels: Labels = {};
 
-export const LogsPanel = ({
-  data,
-  timeZone,
-  fieldConfig,
-  options: {
+export const LogsPanel = ({ data, timeZone, fieldConfig, options, onOptionsChange, height, id }: LogsPanelProps) => {
+  const {
     showControls,
     showFieldSelector,
     controlsStorageKey,
     showLabels,
+    showLevel,
     showTime,
     wrapLogMessage,
     showCommonLabels,
@@ -174,11 +177,8 @@ export const LogsPanel = ({
     timestampResolution,
     showLogAttributes,
     unwrappedColumns,
-    ...options
-  },
-  height,
-  id,
-}: LogsPanelProps) => {
+    grammar,
+  } = options;
   const isAscending = sortOrder === LogsSortOrder.Ascending;
   const style = useStyles2(getStyles);
   const logsContainerRef = useRef<HTMLDivElement>(null);
@@ -413,20 +413,30 @@ export const LogsPanel = ({
     (key: string) => {
       const index = displayedFields?.indexOf(key);
       if (index === -1) {
-        setDisplayedFields(displayedFields?.concat(key));
+        const newDisplayedFields = displayedFields?.concat(key);
+        setDisplayedFields(newDisplayedFields);
+        onOptionsChange({
+          ...options,
+          displayedFields: newDisplayedFields,
+        });
       }
     },
-    [displayedFields]
+    [displayedFields, onOptionsChange, options]
   );
 
   const hideField = useCallback(
     (key: string) => {
       const index = displayedFields?.indexOf(key);
       if (index !== undefined && index > -1) {
-        setDisplayedFields(displayedFields?.filter((k) => key !== k));
+        const newDisplayedFields = displayedFields?.filter((k) => key !== k);
+        setDisplayedFields(newDisplayedFields);
+        onOptionsChange({
+          ...options,
+          displayedFields: newDisplayedFields,
+        });
       }
     },
-    [displayedFields]
+    [displayedFields, onOptionsChange, options]
   );
 
   useEffect(() => {
@@ -589,6 +599,7 @@ export const LogsPanel = ({
               enableLogDetails={enableLogDetails}
               fontSize={fontSize}
               getFieldLinks={getFieldLinks}
+              grammar={isGrammar(grammar) ? grammar : undefined}
               isLabelFilterActive={isIsFilterLabelActive(isFilterLabelActive) ? isFilterLabelActive : undefined}
               initialScrollPosition={initialScrollPosition}
               loading={infiniteScrolling}
@@ -621,6 +632,7 @@ export const LogsPanel = ({
               showControls={Boolean(showControls)}
               showFieldSelector={showFieldSelector}
               showLogAttributes={showLogAttributes}
+              showLevel={storageKey ? store.getBool(`${storageKey}.showLevel`, showLevel ?? true) : showLevel}
               showTime={showTime}
               showUniqueLabels={showLabels}
               sortOrder={sortOrder}

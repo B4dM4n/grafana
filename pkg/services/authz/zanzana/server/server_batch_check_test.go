@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"testing"
 
 	authzv1 "github.com/grafana/authlib/authz/proto/v1"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/grafana/grafana/pkg/apimachinery/utils"
+	"github.com/grafana/grafana/pkg/setting"
 	"github.com/grafana/grafana/pkg/util/testutil"
 )
 
@@ -223,5 +225,154 @@ func TestIntegrationServerBatchCheck(t *testing.T) {
 		// user:1 has both get and update access to dashboard 1
 		assert.True(t, res.GetResults()["check1"].GetAllowed())
 		assert.True(t, res.GetResults()["check2"].GetAllowed())
+	})
+
+	t.Run("typed resource: team subresource access", func(t *testing.T) {
+		items := []*authzv1.BatchCheckItem{
+			newItem("check1", utils.VerbGet, teamGroup, teamResource, statusSubresource, "", "1"), // user:14 has access
+			newItem("check2", utils.VerbGet, teamGroup, teamResource, statusSubresource, "", "2"), // no access
+		}
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:14", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 2)
+		assert.True(t, res.GetResults()["check1"].GetAllowed())
+		assert.False(t, res.GetResults()["check2"].GetAllowed())
+	})
+
+	t.Run("typed resource: user subresource access", func(t *testing.T) {
+		items := []*authzv1.BatchCheckItem{
+			newItem("check1", utils.VerbGet, userGroup, userResource, statusSubresource, "", "1"), // user:15 has access
+			newItem("check2", utils.VerbGet, userGroup, userResource, statusSubresource, "", "2"), // no access
+		}
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:15", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 2)
+		assert.True(t, res.GetResults()["check1"].GetAllowed())
+		assert.False(t, res.GetResults()["check2"].GetAllowed())
+	})
+
+	t.Run("typed resource: service account subresource access", func(t *testing.T) {
+		items := []*authzv1.BatchCheckItem{
+			newItem("check1", utils.VerbGet, serviceAccountGroup, serviceAccountResource, statusSubresource, "", "1"), // user:16 has access
+			newItem("check2", utils.VerbGet, serviceAccountGroup, serviceAccountResource, statusSubresource, "", "2"), // no access
+		}
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:16", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 2)
+		assert.True(t, res.GetResults()["check1"].GetAllowed())
+		assert.False(t, res.GetResults()["check2"].GetAllowed())
+	})
+
+	t.Run("mixed generic and typed resources in same batch", func(t *testing.T) {
+		items := []*authzv1.BatchCheckItem{
+			newItem("dash", utils.VerbGet, dashboardGroup, dashboardResource, "", "1", "1"),                       // generic: user:1 has access
+			newItem("folder", utils.VerbGet, folderGroup, folderResource, "", "", "1"),                            // typed folder: user:1 does NOT have access
+			newItem("team", utils.VerbGet, teamGroup, teamResource, statusSubresource, "", "1"),                   // typed team: user:1 does NOT have access
+			newItem("dash-no", utils.VerbGet, dashboardGroup, dashboardResource, "", "1", "999"),                  // generic: no access
+			newItem("sub", utils.VerbGet, dashboardGroup, dashboardResource, statusSubresource, "", "10"),         // generic subresource: no access
+			newItem("sa", utils.VerbGet, serviceAccountGroup, serviceAccountResource, statusSubresource, "", "1"), // typed SA: no access
+		}
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:1", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 6)
+		assert.True(t, res.GetResults()["dash"].GetAllowed())
+		assert.False(t, res.GetResults()["folder"].GetAllowed())
+		assert.False(t, res.GetResults()["team"].GetAllowed())
+		assert.False(t, res.GetResults()["dash-no"].GetAllowed())
+		assert.False(t, res.GetResults()["sub"].GetAllowed())
+		assert.False(t, res.GetResults()["sa"].GetAllowed())
+	})
+
+	t.Run("folder subresource access via set_edit", func(t *testing.T) {
+		// user:5 has set_edit on dashboards in folder 1, which grants get/update/create/delete
+		items := []*authzv1.BatchCheckItem{
+			newItem("check1", utils.VerbGet, dashboardGroup, dashboardResource, "", "1", "100"),    // allowed via set_edit
+			newItem("check2", utils.VerbUpdate, dashboardGroup, dashboardResource, "", "1", "100"), // allowed via set_edit
+			newItem("check3", utils.VerbGet, dashboardGroup, dashboardResource, "", "2", "200"),    // no access
+		}
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:5", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 3)
+		assert.True(t, res.GetResults()["check1"].GetAllowed())
+		assert.True(t, res.GetResults()["check2"].GetAllowed())
+		assert.False(t, res.GetResults()["check3"].GetAllowed())
+	})
+}
+
+func TestIntegrationServerBatchCheck_SubBatching(t *testing.T) {
+	testutil.SkipIntegrationTestInShortMode(t)
+
+	server := setupOpenFGAServer(t)
+	setup(t, server)
+
+	// Set a low limit to force sub-batching within the test
+	server.cfg.OpenFgaServerSettings = setting.OpenFgaServerSettings{
+		MaxChecksPerBatchCheck: 3,
+	}
+
+	newBatchReq := func(subject string, items []*authzv1.BatchCheckItem) *authzv1.BatchCheckRequest {
+		return &authzv1.BatchCheckRequest{
+			Namespace: namespace,
+			Subject:   subject,
+			Checks:    items,
+		}
+	}
+
+	newItem := func(correlationID, verb, group, resource, subresource, folder, name string) *authzv1.BatchCheckItem {
+		return &authzv1.BatchCheckItem{
+			CorrelationId: correlationID,
+			Verb:          verb,
+			Group:         group,
+			Resource:      resource,
+			Subresource:   subresource,
+			Name:          name,
+			Folder:        folder,
+		}
+	}
+
+	t.Run("batch exceeding limit returns correct results for all items", func(t *testing.T) {
+		// user:2 has group_resource access to all dashboards, so all should be allowed.
+		// 7 items with MaxChecksPerBatchCheck=3 forces splitting into multiple sub-batches.
+		items := make([]*authzv1.BatchCheckItem, 7)
+		for i := range items {
+			items[i] = newItem(
+				fmt.Sprintf("check-%d", i),
+				utils.VerbGet, dashboardGroup, dashboardResource, "", "1", fmt.Sprintf("%d", i+1),
+			)
+		}
+
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:2", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 7)
+		for i := range items {
+			assert.True(t, res.GetResults()[fmt.Sprintf("check-%d", i)].GetAllowed(),
+				"check-%d should be allowed via group_resource access", i)
+		}
+	})
+
+	t.Run("batch exceeding limit preserves mixed allowed and denied results", func(t *testing.T) {
+		// user:4 has folder-based access to folders 1 and 3 but not folder 2.
+		// Generate items across folders to get a mix of allowed/denied across sub-batches.
+		items := []*authzv1.BatchCheckItem{
+			newItem("f1-a", utils.VerbGet, dashboardGroup, dashboardResource, "", "1", "100"), // allowed
+			newItem("f1-b", utils.VerbGet, dashboardGroup, dashboardResource, "", "1", "101"), // allowed
+			newItem("f2-a", utils.VerbGet, dashboardGroup, dashboardResource, "", "2", "200"), // denied
+			newItem("f3-a", utils.VerbGet, dashboardGroup, dashboardResource, "", "3", "300"), // allowed
+			newItem("f2-b", utils.VerbGet, dashboardGroup, dashboardResource, "", "2", "201"), // denied
+			newItem("f1-c", utils.VerbGet, dashboardGroup, dashboardResource, "", "1", "102"), // allowed
+			newItem("f3-b", utils.VerbGet, dashboardGroup, dashboardResource, "", "3", "301"), // allowed
+		}
+
+		res, err := server.BatchCheck(newContextWithNamespace(), newBatchReq("user:4", items))
+		require.NoError(t, err)
+		require.Len(t, res.GetResults(), 7)
+
+		assert.True(t, res.GetResults()["f1-a"].GetAllowed())
+		assert.True(t, res.GetResults()["f1-b"].GetAllowed())
+		assert.False(t, res.GetResults()["f2-a"].GetAllowed())
+		assert.True(t, res.GetResults()["f3-a"].GetAllowed())
+		assert.False(t, res.GetResults()["f2-b"].GetAllowed())
+		assert.True(t, res.GetResults()["f1-c"].GetAllowed())
+		assert.True(t, res.GetResults()["f3-b"].GetAllowed())
 	})
 }
