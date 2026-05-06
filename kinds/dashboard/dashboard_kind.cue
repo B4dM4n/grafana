@@ -387,6 +387,7 @@ lineage: schemas: [{
 		// `thresholds`: From thresholds. Informs Grafana to take the color from the matching threshold
 		// `palette-classic`: Classic palette. Grafana will assign color by looking up a color in a palette by series index. Useful for Graphs and pie charts and other categorical data visualizations
 		// `palette-classic-by-name`: Classic palette (by name). Grafana will assign color by looking up a color in a palette by series name. Useful for Graphs and pie charts and other categorical data visualizations
+		// `palette-classic-by-label`: Classic palette (by label). Grafana will assign color by looking up a color in a palette by the series `color` label. Useful for Graphs and pie charts and other categorical data visualizations
 		// `continuous-viridis`: Continuous Viridis palette mode
 		// `continuous-magma`: Continuous Magma palette mode
 		// `continuous-plasma`: Continuous Plasma palette mode
@@ -404,7 +405,7 @@ lineage: schemas: [{
 		// `continuous-purples`: Continuous Purple palette mode
 		// `shades`: Shades of a single color. Specify a single color, useful in an override rule.
 		// `fixed`: Fixed color mode. Specify a single color, useful in an override rule.
-		#FieldColorModeId: "thresholds" | "palette-classic" | "palette-classic-by-name" | "continuous-viridis" | "continuous-magma" | "continuous-plasma" | "continuous-inferno" | "continuous-cividis" | "continuous-GrYlRd" | "continuous-RdYlGr" | "continuous-BlYlRd" | "continuous-YlRd" | "continuous-BlPu" | "continuous-YlBl" | "continuous-blues" | "continuous-reds" | "continuous-greens" | "continuous-purples" | "fixed" | "shades" @cuetsy(kind="enum",memberNames="Thresholds|PaletteClassic|PaletteClassicByName|ContinuousViridis|ContinuousMagma|ContinuousPlasma|ContinuousInferno|ContinuousCividis|ContinuousGrYlRd|ContinuousRdYlGr|ContinuousBlYlRd|ContinuousYlRd|ContinuousBlPu|ContinuousYlBl|ContinuousBlues|ContinuousReds|ContinuousGreens|ContinuousPurples|Fixed|Shades") @grafanamaturity(NeedsExpertReview)
+		#FieldColorModeId: "thresholds" | "palette-classic" | "palette-classic-by-name" | "palette-classic-by-label" | "continuous-viridis" | "continuous-magma" | "continuous-plasma" | "continuous-inferno" | "continuous-cividis" | "continuous-GrYlRd" | "continuous-RdYlGr" | "continuous-BlYlRd" | "continuous-YlRd" | "continuous-BlPu" | "continuous-YlBl" | "continuous-blues" | "continuous-reds" | "continuous-greens" | "continuous-purples" | "fixed" | "shades" @cuetsy(kind="enum",memberNames="Thresholds|PaletteClassic|PaletteClassicByName|PaletteClassicByLabel|ContinuousViridis|ContinuousMagma|ContinuousPlasma|ContinuousInferno|ContinuousCividis|ContinuousGrYlRd|ContinuousRdYlGr|ContinuousBlYlRd|ContinuousYlRd|ContinuousBlPu|ContinuousYlBl|ContinuousBlues|ContinuousReds|ContinuousGreens|ContinuousPurples|Fixed|Shades") @grafanamaturity(NeedsExpertReview)
 
 		// Defines how to assign a series color from "by value" color schemes. For example for an aggregated data points like a timeseries, the color can be assigned by the min, max or last value.
 		#FieldColorSeriesByMode: "min" | "max" | "last" @cuetsy(kind="type")

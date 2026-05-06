@@ -622,6 +622,7 @@ func NewFieldColor() *FieldColor {
 // `thresholds`: From thresholds. Informs Grafana to take the color from the matching threshold
 // `palette-classic`: Classic palette. Grafana will assign color by looking up a color in a palette by series index. Useful for Graphs and pie charts and other categorical data visualizations
 // `palette-classic-by-name`: Classic palette (by name). Grafana will assign color by looking up a color in a palette by series name. Useful for Graphs and pie charts and other categorical data visualizations
+// `palette-classic-by-label`: Classic palette (by label). Grafana will assign color by looking up a color in a palette by the series `color` label. Useful for Graphs and pie charts and other categorical data visualizations
 // `continuous-viridis`: Continuous Viridis palette mode
 // `continuous-magma`: Continuous Magma palette mode
 // `continuous-plasma`: Continuous Plasma palette mode
@@ -645,6 +646,7 @@ const (
 	FieldColorModeIdThresholds           FieldColorModeId = "thresholds"
 	FieldColorModeIdPaletteClassic       FieldColorModeId = "palette-classic"
 	FieldColorModeIdPaletteClassicByName FieldColorModeId = "palette-classic-by-name"
+	FieldColorModeIdPaletteClassicByLabel FieldColorModeId = "palette-classic-by-label"
 	FieldColorModeIdContinuousViridis    FieldColorModeId = "continuous-viridis"
 	FieldColorModeIdContinuousMagma      FieldColorModeId = "continuous-magma"
 	FieldColorModeIdContinuousPlasma     FieldColorModeId = "continuous-plasma"

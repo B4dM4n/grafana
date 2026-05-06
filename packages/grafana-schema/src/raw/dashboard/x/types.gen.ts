@@ -494,6 +494,7 @@ export type VariableType = ('query' | 'adhoc' | 'groupby' | 'constant' | 'dataso
  * `thresholds`: From thresholds. Informs Grafana to take the color from the matching threshold
  * `palette-classic`: Classic palette. Grafana will assign color by looking up a color in a palette by series index. Useful for Graphs and pie charts and other categorical data visualizations
  * `palette-classic-by-name`: Classic palette (by name). Grafana will assign color by looking up a color in a palette by series name. Useful for Graphs and pie charts and other categorical data visualizations
+ * `palette-classic-by-label`: Classic palette (by label). Grafana will assign color by looking up a color in a palette by the series `color` label. Useful for Graphs and pie charts and other categorical data visualizations
  * `continuous-viridis`: Continuous Viridis palette mode
  * `continuous-magma`: Continuous Magma palette mode
  * `continuous-plasma`: Continuous Plasma palette mode
@@ -530,6 +531,7 @@ export enum FieldColorModeId {
   ContinuousYlRd = 'continuous-YlRd',
   Fixed = 'fixed',
   PaletteClassic = 'palette-classic',
+  PaletteClassicByLabel = 'palette-classic-by-label',
   PaletteClassicByName = 'palette-classic-by-name',
   Shades = 'shades',
   Thresholds = 'thresholds',

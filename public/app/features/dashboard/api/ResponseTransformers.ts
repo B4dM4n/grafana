@@ -1323,6 +1323,8 @@ function colorIdToEnumv1(colorId: FieldColorModeId): FieldColorModeIdV1 {
       return FieldColorModeIdV1.PaletteClassic;
     case 'palette-classic-by-name':
       return FieldColorModeIdV1.PaletteClassicByName;
+    case 'palette-classic-by-label':
+      return FieldColorModeIdV1.PaletteClassicByLabel;
     case 'continuous-GrYlRd':
       return FieldColorModeIdV1.ContinuousGrYlRd;
     case 'continuous-RdYlGr':

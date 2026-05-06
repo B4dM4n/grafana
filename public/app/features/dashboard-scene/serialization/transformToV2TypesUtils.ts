@@ -99,6 +99,8 @@ export function colorIdEnumToColorIdV2(colorId: FieldColorModeIdV1 | string): Fi
       return 'palette-classic';
     case FieldColorModeIdV1.PaletteClassicByName:
       return 'palette-classic-by-name';
+    case FieldColorModeIdV1.PaletteClassicByLabel:
+      return 'palette-classic-by-label';
     case FieldColorModeIdV1.ContinuousGrYlRd:
       return 'continuous-GrYlRd';
     case FieldColorModeIdV1.ContinuousRdYlGr:
