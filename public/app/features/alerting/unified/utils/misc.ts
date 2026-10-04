@@ -3,10 +3,11 @@ import { isString, sortBy } from 'lodash';
 import { type Labels, type UrlQueryMap } from '@grafana/data';
 import { GrafanaEdition } from '@grafana/data/internal';
 import { t } from '@grafana/i18n';
-import { config, isFetchError } from '@grafana/runtime';
+import { type FetchError, config, isFetchError } from '@grafana/runtime';
 import { type DataSourceRef } from '@grafana/schema';
 import { contextSrv } from 'app/core/services/context_srv';
 import { getMessageFromError, getRequestConfigFromError, getStatusFromError } from 'app/core/utils/errors';
+import kbn from 'app/core/utils/kbn';
 import { escapePathSeparators } from 'app/features/alerting/unified/utils/rule-id';
 import {
   alertInstanceKey,
@@ -185,7 +186,8 @@ export function makeFolderLink(folderUID: string): string {
 }
 
 export function makeFolderAlertsLink(folderUID: string, title: string): string {
-  return createRelativeUrl(`/dashboards/f/${folderUID}/${title}/alerting`);
+  const slug = kbn.slugifyForUrl(title).replace(/^-+|-+$/g, '') || folderUID;
+  return createRelativeUrl(`/dashboards/f/${folderUID}/${slug}/alerting`);
 }
 
 export function makeFolderSettingsLink(uid: string): string {
@@ -287,6 +289,9 @@ export function isLocalDevEnv() {
 export function isErrorLike(error: unknown): error is Error {
   return Boolean(error && typeof error === 'object' && 'message' in error);
 }
+
+export const isClientFetchError = (error: unknown): error is FetchError =>
+  isFetchError(error) && error.status >= 400 && error.status < 500;
 
 // Small composable guards to safely inspect nested shapes without broad assertions
 function isObject(value: unknown): value is object {

@@ -2,8 +2,7 @@ import React from 'react';
 
 import { store } from '@grafana/data';
 import { t } from '@grafana/i18n';
-import { logWarning } from '@grafana/runtime';
-import { getFeatureFlagClient } from '@grafana/runtime/internal';
+import { config, logWarning } from '@grafana/runtime';
 import {
   NewSceneObjectAddedEvent,
   sceneGraph,
@@ -17,17 +16,17 @@ import {
 import { type RowsLayoutRowKind } from '@grafana/schema/apis/dashboard.grafana.app/v2';
 import { appEvents } from 'app/core/app_events';
 import { LS_ROW_COPY_KEY } from 'app/core/constants';
-import kbn from 'app/core/utils/kbn';
 import { ShowConfirmModalEvent } from 'app/types/events';
 
+import { edit } from '../../actions/utils/edit';
 import { ConditionalRenderingGroup } from '../../conditional-rendering/group/ConditionalRenderingGroup';
-import { dashboardEditActions } from '../../edit-pane/shared';
 import { serializeRow } from '../../serialization/layoutSerializers/RowsLayoutSerializer';
 import { getElements } from '../../serialization/layoutSerializers/utils';
-import { removeRepeatLocalVariableFromSet } from '../../utils/clone';
+import { SectionFiltersSet } from '../../settings/variables/SectionFiltersSet';
+import { cloneSectionVariableSet, removeRepeatLocalVariableFromSet } from '../../utils/clone';
 import { type PanelIdGenerator } from '../../utils/dashboardSceneGraph';
 import { trackDropItemCrossLayout } from '../../utils/tracking';
-import { getDashboardSceneFor, interpolateSectionTitle } from '../../utils/utils';
+import { getDashboardSceneFor, getSlugForRowOrTab, interpolateSectionTitle } from '../../utils/utils';
 import { AutoGridItem } from '../layout-auto-grid/AutoGridItem';
 import { AutoGridLayout } from '../layout-auto-grid/AutoGridLayout';
 import { AutoGridLayoutManager } from '../layout-auto-grid/AutoGridLayoutManager';
@@ -41,7 +40,7 @@ import { type DashboardLayoutManager } from '../types/DashboardLayoutManager';
 import { type EditableDashboardElement, type EditableDashboardElementInfo } from '../types/EditableDashboardElement';
 import { type LayoutParent } from '../types/LayoutParent';
 
-import { useEditOptions } from './RowItemEditor';
+import { useSidebarOptions } from './RowItemEditor';
 import { RowItemRenderer } from './RowItemRenderer';
 import { RowItems } from './RowItems';
 import { RowsLayoutManager } from './RowsLayoutManager';
@@ -72,7 +71,9 @@ export class RowItem
 
   public readonly isEditableDashboardElement = true;
   public readonly isDashboardDropTarget = true;
+  public readonly dashboardLayoutItemType = 'row';
   public containerRef: React.MutableRefObject<HTMLDivElement | null> = React.createRef<HTMLDivElement>();
+  private _filtersSet?: SectionFiltersSet;
 
   public constructor(state?: Partial<RowItemState>) {
     super({
@@ -98,21 +99,28 @@ export class RowItem
   public getEditableElementInfo(): EditableDashboardElementInfo {
     const isHidden = !this.state.conditionalRendering?.state.result;
     return {
-      typeName: t('dashboard.edit-pane.elements.row', 'Row'),
+      typeName: t('dashboard.sidebar.elements.row', 'Row'),
       instanceName: interpolateSectionTitle(this, this.state.title),
       icon: 'list-ul',
       isHidden,
     };
   }
 
+  private getFiltersSet(): SectionFiltersSet {
+    if (!this._filtersSet) {
+      this._filtersSet = new SectionFiltersSet({ sectionRef: this.getRef() });
+    }
+    return this._filtersSet;
+  }
+
   public getOutlineChildren(isEditing?: boolean): SceneObject[] {
     const layoutChildren = this.state.layout.getOutlineChildren();
-    if (
-      isEditing &&
-      getFeatureFlagClient().getBooleanValue('dashboardSectionVariables', false) &&
-      this.state.$variables
-    ) {
-      return [this.state.$variables, ...layoutChildren];
+    if (isEditing && this.state.$variables) {
+      return [
+        ...(config.featureToggles.dashboardUnifiedDrilldownControls ? [this.getFiltersSet()] : []),
+        this.state.$variables,
+        ...layoutChildren,
+      ];
     }
     return layoutChildren;
   }
@@ -122,19 +130,31 @@ export class RowItem
   }
 
   public getSlug(): string {
-    return kbn.slugifyForUrl(interpolateSectionTitle(this, this.state.title ?? 'Row'));
+    const siblings = this.parent
+      ? this.getParentLayout()
+          .getOutlineChildren()
+          .filter((item): item is RowItem => item instanceof RowItem)
+      : [];
+    return getSlugForRowOrTab(this, siblings);
   }
 
-  public switchLayout(layout: DashboardLayoutManager) {
+  public switchLayout(layout: DashboardLayoutManager, skipUndo?: boolean) {
     const currentLayout = this.state.layout;
 
-    dashboardEditActions.edit({
+    const perform = () => {
+      this.setState({ layout });
+      this.publishEvent(new NewSceneObjectAddedEvent(this), true);
+    };
+
+    if (skipUndo) {
+      perform();
+      return;
+    }
+
+    edit({
       description: t('dashboard.edit-actions.switch-layout-row', 'Switch layout'),
       source: this,
-      perform: () => {
-        this.setState({ layout });
-        this.publishEvent(new NewSceneObjectAddedEvent(this), true);
-      },
+      perform,
       undo: () => {
         this.setState({ layout: currentLayout });
         this.publishEvent(new NewSceneObjectAddedEvent(this), true);
@@ -142,7 +162,7 @@ export class RowItem
     });
   }
 
-  public useEditPaneOptions = useEditOptions.bind(this);
+  public useSidebarOptions = useSidebarOptions.bind(this);
 
   public onDelete() {
     this.getParentLayout().removeRow(this);
@@ -180,7 +200,11 @@ export class RowItem
   // panelIdGenerator is a shared sequential counter created by the parent layout
   // we forward id to ensure sibling tabs never produce duplicate panel IDs
   public duplicate(panelIdGenerator?: PanelIdGenerator): RowItem {
-    return this.clone({ key: undefined, layout: this.getLayout().duplicate(panelIdGenerator) });
+    return this.clone({
+      key: undefined,
+      layout: this.getLayout().duplicate(panelIdGenerator),
+      $variables: cloneSectionVariableSet(this.state.$variables),
+    });
   }
 
   public serialize(): RowsLayoutRowKind {

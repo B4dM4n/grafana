@@ -36,6 +36,7 @@ export function SuggestedDashboardsBanner({ route, dashboard }: Props) {
     DashboardLibraryInteractions.entryPointClicked({
       entryPoint: SOURCE_ENTRY_POINTS.DASHBOARD_PAGE_SUGGESTED_DASHBOARDS_BANNER,
       contentKind: CONTENT_KINDS.SUGGESTED_DASHBOARDS,
+      contentKinds: [CONTENT_KINDS.SUGGESTED_DASHBOARDS],
     });
     onClick();
   };
@@ -54,7 +55,10 @@ export function SuggestedDashboardsBanner({ route, dashboard }: Props) {
       {({ openModal }) => (
         <Alert
           severity="info"
-          title={t('dashboard-scene.suggested-dashboard-banner.title', 'You are viewing {{title}}', { title })}
+          title={t('dashboard-scene.suggested-dashboard-banner.title', 'You are viewing {{title}}', {
+            title,
+            interpolation: { escapeValue: false },
+          })}
           style={{ flex: 0 }}
           onRemove={() => setDismissed(true)}
         >

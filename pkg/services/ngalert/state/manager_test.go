@@ -73,8 +73,8 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 			EndsAt:             evaluationTime.Add(1 * time.Minute),
 			LastEvaluationTime: evaluationTime,
 			EvaluationDuration: 1 * time.Second,
-			LastSentAt:         util.Pointer(evaluationTime),
-			ResolvedAt:         util.Pointer(evaluationTime),
+			LastSentAt:         new(evaluationTime),
+			ResolvedAt:         new(evaluationTime),
 			Annotations:        rule.Annotations, // alert instance has no stored annotations, falls back to the rule annotations
 			ResultFingerprint:  data.Fingerprint(math.MaxUint64),
 		}, {
@@ -87,7 +87,7 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 			EndsAt:             evaluationTime.Add(1 * time.Minute),
 			LastEvaluationTime: evaluationTime,
 			EvaluationDuration: 2 * time.Second,
-			LastSentAt:         util.Pointer(evaluationTime.Add(-1 * time.Minute)),
+			LastSentAt:         new(evaluationTime.Add(-1 * time.Minute)),
 			ResolvedAt:         nil,
 			Annotations:        map[string]string{"testAnnotation": "value-2"},
 			ResultFingerprint:  data.Fingerprint(math.MaxUint64 - 1),
@@ -102,7 +102,7 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 			EndsAt:             evaluationTime.Add(1 * time.Minute),
 			LastEvaluationTime: evaluationTime,
 			EvaluationDuration: 3 * time.Second,
-			LastSentAt:         util.Pointer(evaluationTime.Add(-1 * time.Minute)),
+			LastSentAt:         new(evaluationTime.Add(-1 * time.Minute)),
 			ResolvedAt:         nil,
 			Annotations:        map[string]string{"testAnnotation": "value-3"},
 			ResultFingerprint:  data.Fingerprint(0),
@@ -117,7 +117,7 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 			EndsAt:             evaluationTime.Add(1 * time.Minute),
 			LastEvaluationTime: evaluationTime,
 			EvaluationDuration: 4 * time.Second,
-			LastSentAt:         util.Pointer(evaluationTime.Add(-1 * time.Minute)),
+			LastSentAt:         new(evaluationTime.Add(-1 * time.Minute)),
 			ResolvedAt:         nil,
 			Annotations:        map[string]string{"testAnnotation": "value-4"},
 			ResultFingerprint:  data.Fingerprint(1),
@@ -173,7 +173,7 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 		LastEvalTime:       evaluationTime,
 		CurrentStateSince:  evaluationTime.Add(-1 * time.Minute),
 		CurrentStateEnd:    evaluationTime.Add(1 * time.Minute),
-		LastSentAt:         util.Pointer(evaluationTime.Add(-1 * time.Minute)),
+		LastSentAt:         new(evaluationTime.Add(-1 * time.Minute)),
 		ResolvedAt:         nil,
 		Labels:             labels,
 		Annotations:        models.InstanceAnnotations{"testAnnotation": "value-2"},
@@ -193,7 +193,7 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 		LastEvalTime:       evaluationTime,
 		CurrentStateSince:  evaluationTime.Add(-1 * time.Minute),
 		CurrentStateEnd:    evaluationTime.Add(1 * time.Minute),
-		LastSentAt:         util.Pointer(evaluationTime.Add(-1 * time.Minute)),
+		LastSentAt:         new(evaluationTime.Add(-1 * time.Minute)),
 		ResolvedAt:         nil,
 		Labels:             labels,
 		Annotations:        models.InstanceAnnotations{"testAnnotation": "value-3"},
@@ -213,7 +213,7 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 		LastEvalTime:       evaluationTime,
 		CurrentStateSince:  evaluationTime.Add(-1 * time.Minute),
 		CurrentStateEnd:    evaluationTime.Add(1 * time.Minute),
-		LastSentAt:         util.Pointer(evaluationTime.Add(-1 * time.Minute)),
+		LastSentAt:         new(evaluationTime.Add(-1 * time.Minute)),
 		ResolvedAt:         nil,
 		Labels:             labels,
 		Annotations:        models.InstanceAnnotations{"testAnnotation": "value-4"},
@@ -262,9 +262,8 @@ func TestIntegrationWarmStateCache(t *testing.T) {
 		EvaluationDuration: 6 * time.Second,
 	})
 
-	for _, instance := range instances {
-		_ = ng.InstanceStore.SaveAlertInstance(ctx, instance)
-	}
+	err = ng.InstanceStore.SaveAlertInstancesForRule(ctx, rule.GetKeyWithGroup(), instances)
+	require.NoError(t, err)
 
 	cfg := state.ManagerCfg{
 		Metrics:       metrics.NewNGAlert(prometheus.NewPedanticRegistry()).GetStateMetrics(),
@@ -338,7 +337,7 @@ func TestIntegrationDashboardAnnotations(t *testing.T) {
 	st.Warm(ctx, dbstore, dbstore, ng.InstanceStore)
 	bValue := float64(42)
 	cValue := float64(1)
-	_ = st.ProcessEvalResults(ctx, evaluationTime, rule, eval.Results{{
+	_, _ = st.ProcessEvalResults(ctx, evaluationTime, rule, eval.Results{{
 		Instance:    data.Labels{"instance_label": "testValue2"},
 		State:       eval.Alerting,
 		EvaluatedAt: evaluationTime,
@@ -402,7 +401,7 @@ func TestIntegrationProcessEvalResultsTemplatedLabelKeysAreNotExpanded(t *testin
 	})
 
 	st.Warm(ctx, dbstore, dbstore, ng.InstanceStore)
-	_ = st.ProcessEvalResults(ctx, evaluationTime, rule, eval.Results{{
+	_, _ = st.ProcessEvalResults(ctx, evaluationTime, rule, eval.Results{{
 		Instance:    data.Labels{"instance_label": "test-value"},
 		State:       eval.Alerting,
 		EvaluatedAt: evaluationTime,
@@ -637,9 +636,9 @@ func TestProcessEvalResults(t *testing.T) {
 					LatestResult:       newEvaluation(tn(4), eval.Alerting),
 					StartsAt:           tn(4),
 					EndsAt:             tn(4).Add(state.ResendDelay * 4),
-					FiredAt:            util.Pointer(tn(4)),
+					FiredAt:            new(tn(4)),
 					LastEvaluationTime: tn(4),
-					LastSentAt:         util.Pointer(tn(4)),
+					LastSentAt:         new(tn(4)),
 				},
 			},
 		},
@@ -762,9 +761,9 @@ func TestProcessEvalResults(t *testing.T) {
 					LatestResult:       newEvaluation(tn(5), eval.Alerting),
 					StartsAt:           tn(4),
 					EndsAt:             tn(5).Add(state.ResendDelay * 4),
-					FiredAt:            util.Pointer(tn(4)),
+					FiredAt:            new(tn(4)),
 					LastEvaluationTime: tn(5),
-					LastSentAt:         util.Pointer(tn(4)),
+					LastSentAt:         new(tn(4)),
 				},
 			},
 		},
@@ -802,7 +801,7 @@ func TestProcessEvalResults(t *testing.T) {
 					EndsAt:             tn(6).Add(state.ResendDelay * 4),
 					FiredAt:            &t3,
 					LastEvaluationTime: tn(6),
-					LastSentAt:         util.Pointer(tn(6)), // NoData fired at tn(6).
+					LastSentAt:         new(tn(6)), // NoData fired at tn(6).
 				},
 			},
 		},
@@ -1044,9 +1043,9 @@ func TestProcessEvalResults(t *testing.T) {
 					LatestResult:       newEvaluation(tn(5), eval.Error),
 					StartsAt:           tn(5),
 					EndsAt:             tn(5).Add(state.ResendDelay * 4),
-					FiredAt:            util.Pointer(tn(5)),
+					FiredAt:            new(tn(5)),
 					LastEvaluationTime: tn(5),
-					LastSentAt:         util.Pointer(tn(5)),
+					LastSentAt:         new(tn(5)),
 				},
 			},
 		},
@@ -1109,7 +1108,7 @@ func TestProcessEvalResults(t *testing.T) {
 					StartsAt:           tn(5),
 					EndsAt:             tn(5).Add(state.ResendDelay * 4),
 					LastEvaluationTime: tn(5),
-					LastSentAt:         util.Pointer(tn(5)),
+					LastSentAt:         new(tn(5)),
 				},
 			},
 		},
@@ -1195,7 +1194,7 @@ func TestProcessEvalResults(t *testing.T) {
 					StartsAt:           tn(5),
 					EndsAt:             tn(5).Add(state.ResendDelay * 4),
 					LastEvaluationTime: tn(5),
-					LastSentAt:         util.Pointer(tn(5)),
+					LastSentAt:         new(tn(5)),
 				},
 			},
 		},
@@ -1368,7 +1367,7 @@ func TestProcessEvalResults(t *testing.T) {
 					StartsAt:           t3,
 					EndsAt:             t3.Add(state.ResendDelay * 4),
 					LastEvaluationTime: t3,
-					LastSentAt:         util.Pointer(t3),
+					LastSentAt:         new(t3),
 				},
 			},
 		},
@@ -1396,7 +1395,7 @@ func TestProcessEvalResults(t *testing.T) {
 					StartsAt:           t3,
 					EndsAt:             t3.Add(state.ResendDelay * 4),
 					LastEvaluationTime: t3,
-					LastSentAt:         util.Pointer(t3),
+					LastSentAt:         new(t3),
 				},
 			},
 		},
@@ -1429,8 +1428,8 @@ func TestProcessEvalResults(t *testing.T) {
 					StartsAt:           tn(4),
 					EndsAt:             tn(4).Add(state.ResendDelay * 4),
 					LastEvaluationTime: tn(4),
-					FiredAt:            &t2,              // Preserved from when alert was Alerting.
-					LastSentAt:         util.Pointer(t2), // Preserved from when alert was Alerting.
+					FiredAt:            &t2,     // Preserved from when alert was Alerting.
+					LastSentAt:         new(t2), // Preserved from when alert was Alerting.
 					ResolvedAt:         nil,
 				},
 			},
@@ -1462,8 +1461,8 @@ func TestProcessEvalResults(t *testing.T) {
 					StartsAt:           tn(4),
 					EndsAt:             tn(4).Add(state.ResendDelay * 4),
 					LastEvaluationTime: tn(4),
-					FiredAt:            &t2,              // Preserved from when alert was Alerting.
-					LastSentAt:         util.Pointer(t2), // Preserved from when alert was Alerting.
+					FiredAt:            &t2,     // Preserved from when alert was Alerting.
+					LastSentAt:         new(t2), // Preserved from when alert was Alerting.
 					ResolvedAt:         nil,
 				},
 			},
@@ -1549,8 +1548,8 @@ func TestProcessEvalResults(t *testing.T) {
 						eval.WithState(eval.Alerting),
 						eval.WithLabels(data.Labels{}),
 						eval.WithValues(map[string]eval.NumberValueCapture{
-							"A": {Var: "A", Labels: data.Labels{}, Value: util.Pointer(1.0)},
-							"B": {Var: "B", Labels: data.Labels{}, Value: util.Pointer(2.0)},
+							"A": {Var: "A", Labels: data.Labels{}, Value: new(1.0)},
+							"B": {Var: "B", Labels: data.Labels{}, Value: new(2.0)},
 						})),
 				},
 			},
@@ -1585,8 +1584,8 @@ func TestProcessEvalResults(t *testing.T) {
 						eval.WithState(eval.Alerting),
 						eval.WithLabels(data.Labels{}),
 						eval.WithValues(map[string]eval.NumberValueCapture{
-							"B0": {Var: "B", Labels: data.Labels{}, Value: util.Pointer(1.0)},
-							"B1": {Var: "B", Labels: data.Labels{}, Value: util.Pointer(2.0)},
+							"B0": {Var: "B", Labels: data.Labels{}, Value: new(1.0)},
+							"B1": {Var: "B", Labels: data.Labels{}, Value: new(2.0)},
 						})),
 				},
 			},
@@ -1636,7 +1635,7 @@ func TestProcessEvalResults(t *testing.T) {
 					EndsAt:             t3.Add(state.ResendDelay * 4),
 					FiredAt:            &t2,
 					LastEvaluationTime: t3,
-					LastSentAt:         util.Pointer(t2),
+					LastSentAt:         new(t2),
 				},
 			},
 		},
@@ -1671,8 +1670,8 @@ func TestProcessEvalResults(t *testing.T) {
 					EndsAt:             tn(5),
 					FiredAt:            &t2,
 					LastEvaluationTime: tn(5),
-					LastSentAt:         util.Pointer(tn(5)),
-					ResolvedAt:         util.Pointer(tn(5)),
+					LastSentAt:         new(tn(5)),
+					ResolvedAt:         new(tn(5)),
 				},
 			},
 		},
@@ -1708,9 +1707,9 @@ func TestProcessEvalResults(t *testing.T) {
 					LatestResult:       newEvaluation(tn(6), eval.Normal),
 					StartsAt:           tn(6),
 					EndsAt:             tn(6).Add(state.ResendDelay * 4),
-					FiredAt:            util.Pointer(tn(4)),
+					FiredAt:            new(tn(4)),
 					LastEvaluationTime: tn(6),
-					LastSentAt:         util.Pointer(tn(5)),
+					LastSentAt:         new(tn(5)),
 				},
 			},
 		},
@@ -1743,9 +1742,9 @@ func TestProcessEvalResults(t *testing.T) {
 					LatestResult:       newEvaluation(tn(5), eval.Alerting),
 					StartsAt:           tn(5),
 					EndsAt:             tn(5).Add(state.ResendDelay * 4),
-					FiredAt:            util.Pointer(tn(5)),
+					FiredAt:            new(tn(5)),
 					LastEvaluationTime: tn(5),
-					LastSentAt:         util.Pointer(t3),
+					LastSentAt:         new(t3),
 				},
 			},
 		},
@@ -1788,7 +1787,7 @@ func TestProcessEvalResults(t *testing.T) {
 					res[i].EvaluatedAt = evalTime
 				}
 				clk.Set(evalTime)
-				_ = st.ProcessEvalResults(context.Background(), evalTime, tc.alertRule, res, systemLabels, state.NoopSender)
+				_, _ = st.ProcessEvalResults(context.Background(), evalTime, tc.alertRule, res, systemLabels, state.NoopSender)
 				results += len(res)
 			}
 
@@ -1888,7 +1887,7 @@ func TestProcessEvalResults(t *testing.T) {
 			}),
 		)}
 
-		_ = st.ProcessEvalResults(context.Background(), time, rule, res, systemLabels, state.NoopSender)
+		_, _ = st.ProcessEvalResults(context.Background(), time, rule, res, systemLabels, state.NoopSender)
 
 		states := st.GetStatesForRuleUID(context.Background(), rule.OrgID, rule.UID)
 		require.Len(t, states, 1)
@@ -1918,7 +1917,7 @@ func TestProcessEvalResults(t *testing.T) {
 		now := clk.Now()
 		var results = eval.GenerateResults(rand.Intn(4)+1, eval.ResultGen(eval.WithEvaluatedAt(now)))
 
-		states := st.ProcessEvalResults(context.Background(), now, rule, results, make(data.Labels), nil)
+		states, _ := st.ProcessEvalResults(context.Background(), now, rule, results, make(data.Labels), nil)
 		require.NotEmpty(t, states)
 
 		savedStates := make(map[data.Fingerprint]models.AlertInstance)
@@ -2023,9 +2022,8 @@ func TestIntegrationStaleResultsHandler(t *testing.T) {
 		},
 	}
 
-	for _, instance := range instances {
-		_ = ng.InstanceStore.SaveAlertInstance(ctx, instance)
-	}
+	err = ng.InstanceStore.SaveAlertInstancesForRule(ctx, rule.GetKeyWithGroup(), instances)
+	require.NoError(t, err)
 
 	testCases := []struct {
 		desc               string
@@ -2098,7 +2096,7 @@ func TestIntegrationStaleResultsHandler(t *testing.T) {
 					evalTime = re.EvaluatedAt
 				}
 			}
-			st.ProcessEvalResults(context.Background(), evalTime, rule, res, data.Labels{
+			_, _ = st.ProcessEvalResults(context.Background(), evalTime, rule, res, data.Labels{
 				"alertname":                    rule.Title,
 				"__alert_rule_namespace_uid__": rule.NamespaceUID,
 				"__alert_rule_uid__":           rule.UID,
@@ -2188,7 +2186,7 @@ func TestStaleResults(t *testing.T) {
 
 	// Init
 	var statesToSend state.StateTransitions
-	processed := st.ProcessEvalResults(ctx, clk.Now(), rule, initResults, nil, func(_ context.Context, states state.StateTransitions) {
+	processed, _ := st.ProcessEvalResults(ctx, clk.Now(), rule, initResults, nil, func(_ context.Context, states state.StateTransitions) {
 		statesToSend = states
 	})
 	checkExpectedStateTransitions(t, processed, initStates)
@@ -2210,7 +2208,7 @@ func TestStaleResults(t *testing.T) {
 
 	var expectedStaleKeys []models.AlertInstanceKey
 	t.Run("should mark missing states as stale", func(t *testing.T) {
-		processed = st.ProcessEvalResults(ctx, clk.Now(), rule, results, nil, nil)
+		processed, _ = st.ProcessEvalResults(ctx, clk.Now(), rule, results, nil, nil)
 		checkExpectedStateTransitions(t, processed, initStates)
 		for _, s := range processed {
 			if s.CacheID == state1 {
@@ -2287,9 +2285,8 @@ func TestIntegrationDeleteStateByRuleUID(t *testing.T) {
 		},
 	}
 
-	for _, instance := range instances {
-		_ = ng.InstanceStore.SaveAlertInstance(ctx, instance)
-	}
+	err = ng.InstanceStore.SaveAlertInstancesForRule(ctx, rule.GetKeyWithGroup(), instances)
+	require.NoError(t, err)
 
 	testCases := []struct {
 		desc          string
@@ -2435,9 +2432,8 @@ func TestIntegrationResetStateByRuleUID(t *testing.T) {
 		},
 	}
 
-	for _, instance := range instances {
-		_ = ng.InstanceStore.SaveAlertInstance(ctx, instance)
-	}
+	err = ng.InstanceStore.SaveAlertInstancesForRule(ctx, rule.GetKeyWithGroup(), instances)
+	require.NoError(t, err)
 
 	testCases := []struct {
 		desc          string
@@ -2795,7 +2791,7 @@ func TestStateManager_HistorianIntegration(t *testing.T) {
 				// Clear historian state transitions before the evaluation
 				historian.StateTransitions = nil
 
-				mgr.ProcessEvalResults(
+				_, _ = mgr.ProcessEvalResults(
 					context.Background(),
 					evalTime,
 					scenario.rule,

@@ -73,6 +73,14 @@ export function transformSortVariableToEnum(sort?: VariableSortV1): VariableSort
       return 'numericalAsc';
     case 4:
       return 'numericalDesc';
+    case 5:
+      return 'alphabeticalCaseInsensitiveAsc';
+    case 6:
+      return 'alphabeticalCaseInsensitiveDesc';
+    case 7:
+      return 'naturalAsc';
+    case 8:
+      return 'naturalDesc';
     default:
       return defaultVariableSort();
   }
@@ -101,6 +109,14 @@ export function colorIdEnumToColorIdV2(colorId: FieldColorModeIdV1 | string): Fi
       return 'palette-classic-by-name';
     case FieldColorModeIdV1.PaletteClassicByLabel:
       return 'palette-classic-by-label';
+    case 'palette-colorblind':
+      return 'palette-colorblind';
+    case 'palette-categorical-next':
+      return 'palette-categorical-next';
+    case 'palette-categorical-next-2':
+      return 'palette-categorical-next-2';
+    case 'palette-categorical-next-3':
+      return 'palette-categorical-next-3';
     case FieldColorModeIdV1.ContinuousGrYlRd:
       return 'continuous-GrYlRd';
     case FieldColorModeIdV1.ContinuousRdYlGr:
@@ -135,6 +151,8 @@ export function colorIdEnumToColorIdV2(colorId: FieldColorModeIdV1 | string): Fi
       return 'fixed';
     case FieldColorModeIdV1.Shades:
       return 'shades';
+    case 'gradient':
+      return 'gradient';
     default:
       return undefined;
   }

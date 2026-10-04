@@ -16,7 +16,10 @@ export function OptionsPaneItemOverrides({ overrides }: Props) {
     <div className={styles.wrapper}>
       {overrides.map((override, index) => (
         <Tooltip content={override.tooltip} key={index.toString()} placement="top">
-          <div aria-label={override.description} className={styles[override.type]} />
+          <div>
+            <div aria-hidden="true" className={styles[override.type]} />
+            <span className="sr-only">{override.description}</span>
+          </div>
         </Tooltip>
       ))}
     </div>
@@ -39,7 +42,7 @@ const getStyles = (theme: GrafanaTheme2) => {
     rule: css({
       ...common,
       position: 'relative',
-      backgroundColor: theme.colors.primary.main,
+      backgroundColor: theme.colors.info.main,
     }),
     data: css({
       ...common,

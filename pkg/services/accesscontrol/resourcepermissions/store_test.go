@@ -14,6 +14,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
+	"github.com/grafana/grafana/pkg/services/folder"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/org/orgimpl"
 	"github.com/grafana/grafana/pkg/services/quota/quotatest"
@@ -22,6 +23,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/services/user/userimpl"
 	"github.com/grafana/grafana/pkg/setting"
+	"github.com/grafana/grafana/pkg/storage/legacysql"
 	"github.com/grafana/grafana/pkg/tests/testsuite"
 	"github.com/grafana/grafana/pkg/util/testutil"
 )
@@ -467,7 +469,7 @@ func TestIntegrationStore_GetResourcePermissions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			store, sql, cfg := setupTestEnv(t)
-			orgService, err := orgimpl.ProvideService(sql, cfg, quotatest.New(false, nil))
+			orgService, err := orgimpl.ProvideService(legacysql.NewDatabaseProvider(sql), cfg, quotatest.New(false, nil))
 			require.NoError(t, err)
 
 			err = sql.WithDbSession(context.Background(), func(sess *db.Session) error {
@@ -558,7 +560,7 @@ func seedResourcePermissions(
 }
 
 func setupTestEnv(t testing.TB) (*store, db.DB, *setting.Cfg) {
-	sql, cfg := db.InitTestDBWithCfg(t)
+	sql, cfg := db.InitTestDBWithCfg(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 	return NewStore(cfg, sql, featuremgmt.WithFeatures()), sql, cfg
 }
 
@@ -583,7 +585,7 @@ func TestStore_IsInherited(t *testing.T) {
 		{
 			description: "specific folder scope for dashboards is inherited",
 			permission: &flatResourcePermission{
-				Scope:    dashboards.ScopeFoldersProvider.GetResourceScopeUID("parent"),
+				Scope:    folder.ScopeFoldersProvider.GetResourceScopeUID("parent"),
 				RoleName: fmt.Sprintf("%stest_role", accesscontrol.ManagedRolePrefix),
 			},
 			requiredScope: dashboards.ScopeDashboardsProvider.GetResourceScopeUID("some_uid"),
@@ -601,10 +603,10 @@ func TestStore_IsInherited(t *testing.T) {
 		{
 			description: "parent folder scope for nested folders is inherited",
 			permission: &flatResourcePermission{
-				Scope:    dashboards.ScopeFoldersProvider.GetResourceScopeUID("parent"),
+				Scope:    folder.ScopeFoldersProvider.GetResourceScopeUID("parent"),
 				RoleName: fmt.Sprintf("%stest_role", accesscontrol.ManagedRolePrefix),
 			},
-			requiredScope: dashboards.ScopeFoldersProvider.GetResourceScopeUID("some_folder"),
+			requiredScope: folder.ScopeFoldersProvider.GetResourceScopeUID("some_folder"),
 			expected:      true,
 		},
 	}

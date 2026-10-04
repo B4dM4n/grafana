@@ -28,12 +28,13 @@ export function ExpressionTypePicker() {
 
         return (
           <Card
+            className={styles.card}
             key={item.value}
             onClick={() => {
               reportInteraction('dashboards_expression_interaction', {
                 action: 'add_expression',
                 expression_type: item.value,
-                context: 'panel_query_section',
+                context: 'query_editor_next',
               });
               finalizePendingExpression(item.value);
             }}
@@ -61,5 +62,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'block',
     maxWidth: '100%',
     marginTop: theme.spacing(2),
+  }),
+  card: css({
+    background: theme.colors.background.secondary,
+
+    '&:hover': {
+      background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
+    },
   }),
 });

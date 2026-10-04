@@ -28,6 +28,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
 	"github.com/grafana/grafana/pkg/services/accesscontrol/actest"
 	acmock "github.com/grafana/grafana/pkg/services/accesscontrol/mock"
+	"github.com/grafana/grafana/pkg/services/annotations"
 	"github.com/grafana/grafana/pkg/services/apiserver/client"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/dashboards/dashboardaccess"
@@ -43,6 +44,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/sqlstore"
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/setting"
+	"github.com/grafana/grafana/pkg/storage/legacysql"
 	"github.com/grafana/grafana/pkg/storage/unified/resource"
 	"github.com/grafana/grafana/pkg/storage/unified/resourcepb"
 	"github.com/grafana/grafana/pkg/storage/unified/search/builders"
@@ -796,8 +798,9 @@ func TestSaveProvisionedDashboard(t *testing.T) {
 				UID: "general",
 			},
 		},
-		ac:  actest.FakeAccessControl{ExpectedEvaluate: true},
-		log: log.NewNopLogger(),
+		ac:       actest.FakeAccessControl{ExpectedEvaluate: true},
+		log:      log.NewNopLogger(),
+		features: featuremgmt.WithFeatures(),
 	}
 
 	query := &dashboards.SaveDashboardDTO{
@@ -842,7 +845,8 @@ func TestSaveDashboard(t *testing.T) {
 		folderService: &foldertest.FakeService{
 			ExpectedFolder: &folder.Folder{},
 		},
-		ac: actest.FakeAccessControl{ExpectedEvaluate: true},
+		ac:       actest.FakeAccessControl{ExpectedEvaluate: true},
+		features: featuremgmt.WithFeatures(),
 	}
 
 	query := &dashboards.SaveDashboardDTO{
@@ -1800,6 +1804,48 @@ func TestSearchProvisionedDashboardsThroughK8sRaw(t *testing.T) {
 	assert.Equal(t, "dash-db", query.Type) // query type should be added as dashboards only
 }
 
+func TestCountProvisionedDashboardsInOrg(t *testing.T) {
+	ctx := context.Background()
+	k8sCliMock := new(client.MockK8sHandler)
+	service := &DashboardServiceImpl{k8sclient: k8sCliMock}
+	k8sCliMock.On("GetNamespace", mock.Anything, mock.Anything).Return("default")
+	k8sCliMock.On("Search", mock.Anything, mock.Anything, mock.Anything).Return(&resourcepb.ResourceSearchResponse{
+		Results: &resourcepb.ResourceTable{
+			Columns: []*resourcepb.ResourceTableColumnDefinition{
+				{Name: "title", Type: resourcepb.ResourceTableColumnDefinition_STRING},
+				{Name: "folder", Type: resourcepb.ResourceTableColumnDefinition_STRING},
+				{Name: resource.SEARCH_FIELD_MANAGER_KIND, Type: resourcepb.ResourceTableColumnDefinition_STRING},
+				{Name: resource.SEARCH_FIELD_MANAGER_ID, Type: resourcepb.ResourceTableColumnDefinition_STRING},
+				{Name: resource.SEARCH_FIELD_SOURCE_PATH, Type: resourcepb.ResourceTableColumnDefinition_STRING},
+				{Name: resource.SEARCH_FIELD_SOURCE_CHECKSUM, Type: resourcepb.ResourceTableColumnDefinition_STRING},
+				{Name: resource.SEARCH_FIELD_SOURCE_TIME, Type: resourcepb.ResourceTableColumnDefinition_INT64},
+			},
+			Rows: []*resourcepb.ResourceTableRow{
+				{
+					Key: &resourcepb.ResourceKey{
+						Name:     "uid",
+						Resource: "dashboard",
+					},
+					Cells: [][]byte{
+						[]byte("Dashboard 1"),
+						[]byte("folder 1"),
+						[]byte(string(utils.ManagerKindClassicFP)), // nolint:staticcheck
+						[]byte("test"),
+						[]byte("path/to/file"),
+						[]byte("hash"),
+						[]byte("1234567"),
+					},
+				},
+			},
+		},
+		TotalHits: 1,
+	}, nil)
+
+	n, err := service.CountProvisionedDashboardsInOrg(ctx, 1)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), n)
+}
+
 func TestLegacySaveCommandToUnstructured(t *testing.T) {
 	namespace := "test-namespace"
 	t.Run("successfully converts save command to unstructured", func(t *testing.T) {
@@ -1928,7 +1974,7 @@ func TestSetDefaultPermissionsAfterCreate(t *testing.T) {
 
 func TestCleanUpDashboard(t *testing.T) {
 	t.Run("Should delete public dashboards and clean up after delete", func(t *testing.T) {
-		sqlStore, _ := sqlstore.InitTestDB(t)
+		sqlStore, _ := sqlstore.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 		fakePublicDashboardService := publicdashboards.NewFakePublicDashboardServiceWrapper(t)
 		service := &DashboardServiceImpl{
 			cfg:                    setting.NewCfg(),
@@ -1955,6 +2001,58 @@ func TestCleanUpDashboard(t *testing.T) {
 		err := service.CleanUpDashboard(context.Background(), "dash-uid", int64(1), int64(1))
 		require.Error(t, err)
 		require.Equal(t, "deletion error", err.Error())
+		fakePublicDashboardService.AssertExpectations(t)
+	})
+
+	t.Run("Should return error if dashboard UID is empty", func(t *testing.T) {
+		fakePublicDashboardService := publicdashboards.NewFakePublicDashboardServiceWrapper(t)
+		service := &DashboardServiceImpl{
+			cfg:                    setting.NewCfg(),
+			publicDashboardService: fakePublicDashboardService,
+		}
+
+		err := service.CleanUpDashboard(context.Background(), "", int64(1), int64(1))
+		require.Error(t, err)
+		require.Equal(t, dashboards.ErrDashboardIdentifierNotSet, err)
+		fakePublicDashboardService.AssertNotCalled(t, "DeleteByDashboardUIDs")
+	})
+
+	t.Run("Should not delete org-scope annotations when dashboard ID is zero", func(t *testing.T) {
+		sqlStore, _ := sqlstore.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
+		fakePublicDashboardService := publicdashboards.NewFakePublicDashboardServiceWrapper(t)
+		service := &DashboardServiceImpl{
+			cfg:                    setting.NewCfg(),
+			sqlStore:               sqlStore,
+			publicDashboardService: fakePublicDashboardService,
+		}
+
+		const orgID int64 = 1
+		err := sqlStore.WithTransactionalDbSession(context.Background(), func(sess *sqlstore.DBSession) error {
+			item := annotations.Item{
+				OrgID:       orgID,
+				DashboardID: 0,
+				Text:        "org annotation",
+				Epoch:       1,
+				Created:     1,
+				Updated:     1,
+			}
+			_, err := sess.Table("annotation").Insert(&item)
+			return err
+		})
+		require.NoError(t, err)
+
+		fakePublicDashboardService.On("DeleteByDashboardUIDs", mock.Anything, orgID, []string{"dash-uid"}).Return(nil)
+
+		err = service.CleanUpDashboard(context.Background(), "dash-uid", 0, orgID)
+		require.NoError(t, err)
+
+		var count int64
+		err = sqlStore.WithDbSession(context.Background(), func(sess *sqlstore.DBSession) error {
+			_, err := sess.SQL("SELECT COUNT(*) FROM annotation WHERE org_id = ? AND dashboard_id = 0", orgID).Get(&count)
+			return err
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
 		fakePublicDashboardService.AssertExpectations(t)
 	})
 }
@@ -2114,8 +2212,8 @@ func TestIntegrationK8sDashboardCleanupJob(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup test database and utilities
-			sqlStore, _ := sqlstore.InitTestDB(t)
-			lockService := serverlock.ProvideService(sqlStore, tracing.InitializeTracerForTest())
+			sqlStore, _ := sqlstore.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
+			lockService := serverlock.ProvideService(legacysql.NewDatabaseProvider(sqlStore), tracing.InitializeTracerForTest())
 			kv := kvstore.NewFakeKVStore()
 
 			fakePublicDashboardService := publicdashboards.NewFakePublicDashboardServiceWrapper(t)
@@ -2151,8 +2249,8 @@ func TestIntegrationK8sDashboardCleanupJob(t *testing.T) {
 
 	t.Run("Should start and stop background job correctly", func(t *testing.T) {
 		// Setup test database and utilities
-		sqlStore, _ := sqlstore.InitTestDB(t)
-		lockService := serverlock.ProvideService(sqlStore, tracing.InitializeTracerForTest())
+		sqlStore, _ := sqlstore.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
+		lockService := serverlock.ProvideService(legacysql.NewDatabaseProvider(sqlStore), tracing.InitializeTracerForTest())
 
 		cfg := setting.NewCfg()
 		cfg.K8sDashboardCleanup = setting.K8sDashboardCleanupSettings{

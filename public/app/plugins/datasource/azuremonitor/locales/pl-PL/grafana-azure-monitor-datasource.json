@@ -4,7 +4,6 @@
       "label-advanced": "Zaawansowane"
     },
     "advanced-resource-picker": {
-      "aria-label-add": "Dodaj",
       "aria-label-remove": "Usuń",
       "button-add-resource": "Dodaj zasób",
       "button-add-resource-uri": "Dodaj identyfikator URI zasobu",
@@ -34,22 +33,22 @@
     },
     "app-registration-credentials": {
       "aria-label-azure-cloud": "Chmura Azure",
-      "aria-label-client-certificate": "",
+      "aria-label-client-certificate": "Certyfikat klienta",
       "aria-label-client-id": "Identyfikator klienta",
       "aria-label-client-secret": "Klucz tajny klienta",
-      "aria-label-private-key": "",
-      "aria-label-private-key-password": "",
+      "aria-label-private-key": "Klucz prywatny",
+      "aria-label-private-key-password": "Hasło do certyfikatu",
       "aria-label-symbol-client-secret": "Klucz tajny klienta",
       "aria-label-tenant-id": "Identyfikator najemcy",
-      "description-certificate-format": "",
+      "description-certificate-format": "Wybierz format certyfikatu (certyfikaty PEM powinny być w formacie PEM z tekstem zwykłym, a certyfikaty PFX – w formacie PFX z kodowaniem base64)",
       "label-azure-cloud": "Chmura Azure",
-      "label-certificate-format": "",
-      "label-client-certificate": "",
+      "label-certificate-format": "Formatowanie",
+      "label-client-certificate": "Certyfikat klienta",
       "label-client-id": "Identyfikator aplikacji (klienta)",
       "label-client-secret": "Klucz tajny klienta",
-      "label-private-key": "",
+      "label-private-key": "Klucz prywatny",
       "label-symbol-client-secret": "Klucz tajny klienta",
-      "label-symbol-private-key-password": "",
+      "label-symbol-private-key-password": "Hasło do certyfikatu",
       "label-tenant-id": "Identyfikator katalogu (najemcy)",
       "placeholder-symbol-client-secret": "skonfigurowano",
       "reset-symbol-client-secret": "Zresetuj"
@@ -71,13 +70,18 @@
     },
     "azure-credentials-form": {
       "description-authentication": "Wybierz typ uwierzytelniania w usługach Azure",
-      "label-authentication": "",
+      "label-authentication": "Typ uwierzytelniania",
       "title-authentication": "Uwierzytelnienie"
     },
     "basic-logs-toggle": {
       "aria-label-enable-basic-logs": "Podstawowe dzienniki",
       "description-basic-logs": "Włączenie tej funkcji wiąże się z opłatami Azure Monitor za każde zapytanie w przypadku paneli pulpitu, które wysyłają zapytania do tabel skonfigurowanych dla <2>podstawowych dzienników</2>.",
       "label-enable-basic-logs": "Włącz podstawowe dzienniki"
+    },
+    "batch-api-toggle": {
+      "aria-label-enable-batch-api": "",
+      "description-batch-api": "",
+      "label-enable-batch-api": ""
     },
     "config-editor": {
       "description-additional-settings": "Dodatkowe ustawienia to opcje, które można skonfigurować, aby uzyskać większą kontrolę nad źródłem danych. Obejmują one Secure Socks Proxy, limit czasu żądania i przekazywane pliki cookie.",
@@ -194,6 +198,13 @@
     "metric-namespace-field": {
       "label-metric-namespace": "Przestrzeń nazw wskaźników"
     },
+    "metrics-query-editor": {
+      "selection-notice-batch": "",
+      "selection-notice-standard": ""
+    },
+    "monitor-config": {
+      "title-features": ""
+    },
     "nested-row": {
       "text-loading": "Ładowanie…"
     },
@@ -205,6 +216,10 @@
       "label-by": "WEDŁUG",
       "label-order-by": "Sortuj według",
       "tooltip-order-by": "Sortuj wyniki na podstawie jednej lub kilku kolumn w kolejności rosnącej lub malejącej."
+    },
+    "pagination": {
+      "results-truncated-message": "",
+      "results-truncated-title": ""
     },
     "query-editor": {
       "alert-error-occurred": "Podczas wysyłania żądania metadanych do narzędzia Azure Monitor wystąpił błąd"

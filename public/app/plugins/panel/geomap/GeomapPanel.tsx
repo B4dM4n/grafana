@@ -35,6 +35,7 @@ import { DEFAULT_BASEMAP_CONFIG } from './layers/registry';
 import { type Options, type MapViewConfig, TooltipMode } from './panelcfg.gen';
 import { type ControlsOptions, type MapLayerState } from './types';
 import { getActions } from './utils/actions';
+import { updateAttributionVisibility } from './utils/attribution';
 import { getLayersExtent } from './utils/getLayersExtent';
 import { applyLayerFilter, initLayer } from './utils/layers';
 import { pointerClickListener, pointerMoveListener, setTooltipListeners } from './utils/tooltip';
@@ -72,6 +73,7 @@ export class GeomapPanel extends Component<Props, State> {
 
   map?: OpenLayersMap;
   mapDiv?: HTMLDivElement;
+  tooltipPointerMoveDebounced?: { cancel: () => void };
   layers: MapLayerState[] = [];
   readonly byName = new Map<string, MapLayerState>();
 
@@ -238,6 +240,7 @@ export class GeomapPanel extends Component<Props, State> {
     // Handle controls changes
     if (newOptions.controls !== oldOptions.controls) {
       this.initControls(newOptions.controls ?? { showZoom: true, showAttribution: true });
+      updateAttributionVisibility(this.layers, newOptions.controls);
     }
   }
 
@@ -296,6 +299,7 @@ export class GeomapPanel extends Component<Props, State> {
       return;
     }
     this.mapDiv = div;
+    this.tooltipPointerMoveDebounced?.cancel();
     if (this.map) {
       this.map.dispose();
     }
@@ -357,6 +361,7 @@ export class GeomapPanel extends Component<Props, State> {
   };
 
   clearTooltip = () => {
+    this.tooltipPointerMoveDebounced?.cancel();
     if (this.state.ttip && !this.state.ttipOpen) {
       this.tooltipPopupClosed();
     }
@@ -444,7 +449,7 @@ export class GeomapPanel extends Component<Props, State> {
       view.setMaxZoom(config.maxZoom);
     }
     if (config.minZoom) {
-      view.setMaxZoom(config.minZoom);
+      view.setMinZoom(config.minZoom);
     }
     if (config.zoom && v?.id !== MapCenterID.Fit) {
       view.setZoom(config.zoom);
@@ -472,9 +477,8 @@ export class GeomapPanel extends Component<Props, State> {
 
     this.mouseWheelZoom?.setActive(Boolean(options.mouseWheelZoom));
 
-    if (options.showAttribution) {
-      this.map.addControl(new Attribution({ collapsed: true, collapsible: true }));
-    }
+    // Attribution visibility is handled per layer, and the control hides itself when no layer supplies any
+    this.map.addControl(new Attribution({ collapsed: true, collapsible: true }));
 
     // Update the react overlays
     let topRight1: ReactNode[] = [];

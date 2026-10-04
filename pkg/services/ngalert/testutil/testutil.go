@@ -28,6 +28,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/search/sort"
 	"github.com/grafana/grafana/pkg/services/supportbundles/supportbundlestest"
 	"github.com/grafana/grafana/pkg/setting"
+	"github.com/grafana/grafana/pkg/storage/legacysql"
 	"github.com/grafana/grafana/pkg/storage/legacysql/dualwrite"
 	"github.com/grafana/grafana/pkg/storage/unified/resource"
 	resourcepb "github.com/grafana/grafana/pkg/storage/unified/resourcepb"
@@ -35,12 +36,11 @@ import (
 
 func SetupFolderService(tb testing.TB, cfg *setting.Cfg, db db.DB, bus *bus.InProcBus, features featuremgmt.FeatureToggles, ac accesscontrol.AccessControl) folder.Service {
 	tb.Helper()
-	fStore := folderimpl.ProvideStore(db, cfg)
 	searchMock := resource.NewMockResourceClient(tb)
 	searchMock.On("Search", mock.Anything, mock.Anything, mock.Anything).Return(&resourcepb.ResourceSearchResponse{TotalHits: 0}, nil).Maybe()
 	searchMock.On("GetStats", mock.Anything, mock.Anything, mock.Anything).Return(&resourcepb.ResourceStatsResponse{}, nil).Maybe()
-	return folderimpl.ProvideService(fStore, ac, bus, nil, db,
-		features, supportbundlestest.NewFakeBundleService(), nil, cfg, nil, tracing.InitializeTracerForTest(), searchMock, dualwrite.ProvideTestService(), sort.ProvideService(), apiserver.WithoutRestConfig)
+	return folderimpl.ProvideService(ac, nil,
+		features, supportbundlestest.NewFakeBundleService(), nil, cfg, nil, tracing.InitializeTracerForTest(), searchMock, sort.ProvideService(), apiserver.WithoutRestConfig)
 }
 
 func SetupDashboardService(tb testing.TB, sqlStore db.DB, cfg *setting.Cfg) *dashboardservice.DashboardServiceImpl {
@@ -67,7 +67,7 @@ func SetupDashboardService(tb testing.TB, sqlStore db.DB, cfg *setting.Cfg) *das
 		nil,
 		nil,
 		dualwrite.ProvideTestService(),
-		serverlock.ProvideService(sqlStore, tracing.InitializeTracerForTest()),
+		serverlock.ProvideService(legacysql.NewDatabaseProvider(sqlStore), tracing.InitializeTracerForTest()),
 		kvstore.NewFakeKVStore(),
 		dashclient.NewK8sClientWithFallback(
 			cfg,
@@ -94,5 +94,5 @@ func SetupDashboardService(tb testing.TB, sqlStore db.DB, cfg *setting.Cfg) *das
 func SetupOrgService(tb testing.TB, sqlStore db.DB, cfg *setting.Cfg) (org.Service, error) {
 	tb.Helper()
 	quotaService := quotatest.New(false, nil)
-	return orgimpl.ProvideService(sqlStore, cfg, quotaService)
+	return orgimpl.ProvideService(legacysql.NewDatabaseProvider(sqlStore), cfg, quotaService)
 }

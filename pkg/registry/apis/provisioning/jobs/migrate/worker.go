@@ -13,7 +13,7 @@ import (
 
 //go:generate mockery --name Migrator --structname MockMigrator --inpackage --filename mock_migrator.go --with-expecter
 type Migrator interface {
-	Migrate(ctx context.Context, rw repository.ReaderWriter, opts provisioning.MigrateJobOptions, progress jobs.JobProgressRecorder) error
+	Migrate(ctx context.Context, rw repository.ReaderWriter, job provisioning.Job, progress jobs.JobProgressRecorder) error
 }
 
 type MigrationWorker struct {
@@ -41,7 +41,9 @@ func (w *MigrationWorker) IsSupported(ctx context.Context, job provisioning.Job)
 
 func (w *MigrationWorker) Process(ctx context.Context, repo repository.Repository, job provisioning.Job, progress jobs.JobProgressRecorder) (processErr error) {
 	if !w.enabled {
-		return errors.New("migrate functionality is disabled by configuration")
+		// A disabled feature is an expected configuration state, not a failure:
+		// complete the job in a warning state so it is not logged or alerted as an error.
+		return jobs.AsWarning(errors.New("migrate functionality is disabled by configuration"))
 	}
 
 	options := job.Spec.Migrate
@@ -65,5 +67,5 @@ func (w *MigrationWorker) Process(ctx context.Context, repo repository.Repositor
 		return errors.New("migration job submitted targeting repository that is not a ReaderWriter")
 	}
 
-	return w.unifiedMigrator.Migrate(ctx, rw, *options, progress)
+	return w.unifiedMigrator.Migrate(ctx, rw, job, progress)
 }

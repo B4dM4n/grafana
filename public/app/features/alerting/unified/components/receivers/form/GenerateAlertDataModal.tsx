@@ -1,5 +1,6 @@
 import { css } from '@emotion/css';
-import { addDays, subDays } from 'date-fns';
+import { addDays } from 'date-fns/addDays';
+import { subDays } from 'date-fns/subDays';
 import { uniqueId } from 'lodash';
 import { useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -102,7 +103,7 @@ export const GenerateAlertDataModal = ({ isOpen, onDismiss, onAccept }: Props) =
             setStatus('firing');
           }}
         >
-          <Card noMargin>
+          <Card className={styles.card} noMargin>
             <Stack direction="column" gap={1}>
               <div className={styles.section}>
                 <AnnotationsStep />
@@ -155,6 +156,13 @@ export const GenerateAlertDataModal = ({ isOpen, onDismiss, onAccept }: Props) =
 };
 
 const getStyles = (theme: GrafanaTheme2) => ({
+  card: css({
+    background: theme.colors.background.secondary,
+
+    '&:hover': {
+      background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
+    },
+  }),
   section: css({
     marginBottom: theme.spacing(2),
   }),

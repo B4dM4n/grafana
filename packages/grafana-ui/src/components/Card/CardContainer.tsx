@@ -50,6 +50,7 @@ export interface CardContainerProps extends HTMLAttributes<HTMLOrSVGElement>, Ca
   /** Remove the bottom margin */
   noMargin?: boolean;
   hasDescriptionComponent?: boolean;
+  hasTagsComponent?: boolean;
 }
 
 /** @deprecated Using `CardContainer` directly is discouraged and should be replaced with `Card` */
@@ -62,6 +63,7 @@ export const CardContainer = ({
   href,
   noMargin,
   hasDescriptionComponent = false,
+  hasTagsComponent = false,
   ...props
 }: CardContainerProps) => {
   const { oldContainer } = useStyles2(
@@ -69,6 +71,7 @@ export const CardContainer = ({
     disableEvents,
     disableHover,
     hasDescriptionComponent,
+    hasTagsComponent,
     isSelected,
     undefined,
     noMargin
@@ -86,64 +89,71 @@ export const getCardContainerStyles = (
   disabled = false,
   disableHover = false,
   hasDescriptionComponent: boolean,
+  hasTagsComponent: boolean,
   isSelected?: boolean,
   isCompact?: boolean,
   noMargin = false
 ) => {
+  const visualRefreshEnabled = theme.flags.visualDesignRefresh;
   const isSelectable = isSelected !== undefined;
 
+  const headingRow = `"Figure Heading ${hasTagsComponent && !isSelectable ? 'Tags' : 'Heading'}" ${hasDescriptionComponent ? '' : '1fr'}`;
+  const metaRow = `"Figure Meta ${hasTagsComponent ? 'Tags' : 'Meta'}"`;
+  const descriptionRow = `"Figure Description ${hasTagsComponent ? 'Tags' : 'Description'}" 1fr`;
+  const actionsRow = `"Figure Actions Secondary" / auto 1fr auto`;
+  const backgroundColor = visualRefreshEnabled ? theme.colors.background.primary : theme.colors.background.secondary;
+
   return {
-    container: css({
-      display: 'grid',
-      position: 'relative',
-      gridTemplate: hasDescriptionComponent
-        ? `
-        "Figure Heading Tags"
-        "Figure Meta Tags"
-        "Figure Description Tags" 1fr
-        "Figure Actions Secondary" / auto 1fr auto
-      `
-        : `
-        "Figure Heading Tags" 1fr
-        "Figure Meta Tags"
-        "Figure Actions Secondary" / auto 1fr auto
+    container: css(
+      {
+        display: 'grid',
+        position: 'relative',
+        gridTemplate: `
+        ${headingRow}
+        ${metaRow}
+        ${hasDescriptionComponent ? descriptionRow : ''}
+        ${actionsRow}
       `,
-      gridAutoColumns: '1fr',
-      gridAutoFlow: 'row',
-      width: '100%',
-      padding: theme.spacing(isCompact ? 1 : 2),
-      background: theme.colors.background.secondary,
-      borderRadius: theme.shape.radius.default,
-      marginBottom: theme.spacing(noMargin ? 0 : 1),
-      pointerEvents: disabled ? 'none' : 'auto',
-      [theme.transitions.handleMotion('no-preference', 'reduce')]: {
-        transition: theme.transitions.create(['background-color', 'box-shadow', 'border-color', 'color'], {
-          duration: theme.transitions.duration.short,
+        gridAutoColumns: '1fr',
+        gridAutoFlow: 'row',
+        width: '100%',
+        padding: theme.spacing(isCompact ? 1 : 2),
+        background: backgroundColor,
+        borderRadius: theme.shape.radius.lg,
+        marginBottom: theme.spacing(noMargin ? 0 : 1),
+        pointerEvents: disabled ? 'none' : 'auto',
+        [theme.transitions.handleMotion('no-preference', 'reduce')]: {
+          transition: theme.transitions.create(['background-color', 'box-shadow', 'border-color', 'color'], {
+            duration: theme.transitions.duration.short,
+          }),
+        },
+
+        ...(!disableHover && {
+          '&:hover': {
+            background: theme.colors.emphasize(backgroundColor, 0.03),
+            cursor: 'pointer',
+            zIndex: 1,
+          },
+          '&:focus': getFocusStyles(theme),
+        }),
+
+        ...(isSelectable && {
+          cursor: 'pointer',
+        }),
+
+        ...(isSelected && {
+          outline: `solid 2px ${theme.colors.primary.border}`,
         }),
       },
-
-      ...(!disableHover && {
-        '&:hover': {
-          background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
-          cursor: 'pointer',
-          zIndex: 1,
-        },
-        '&:focus': getFocusStyles(theme),
-      }),
-
-      ...(isSelectable && {
-        cursor: 'pointer',
-      }),
-
-      ...(isSelected && {
-        outline: `solid 2px ${theme.colors.primary.border}`,
-      }),
-    }),
+      visualRefreshEnabled && {
+        border: `1px solid ${theme.colors.border.weak}`,
+      }
+    ),
     oldContainer: css({
       display: 'flex',
       width: '100%',
-      background: theme.colors.background.secondary,
-      borderRadius: theme.shape.radius.default,
+      background: backgroundColor,
+      borderRadius: theme.shape.radius.lg,
       position: 'relative',
       pointerEvents: disabled ? 'none' : 'auto',
       marginBottom: theme.spacing(noMargin ? 0 : 1),
@@ -155,7 +165,7 @@ export const getCardContainerStyles = (
 
       ...(!disableHover && {
         '&:hover': {
-          background: theme.colors.emphasize(theme.colors.background.secondary, 0.03),
+          background: theme.colors.emphasize(backgroundColor, 0.03),
           cursor: 'pointer',
           zIndex: 1,
         },

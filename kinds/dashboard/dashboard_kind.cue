@@ -390,7 +390,7 @@ lineage: schemas: [{
 		// `thresholds`: From thresholds. Informs Grafana to take the color from the matching threshold
 		// `palette-classic`: Classic palette. Grafana will assign color by looking up a color in a palette by series index. Useful for Graphs and pie charts and other categorical data visualizations
 		// `palette-classic-by-name`: Classic palette (by name). Grafana will assign color by looking up a color in a palette by series name. Useful for Graphs and pie charts and other categorical data visualizations
-		// `palette-classic-by-label`: Classic palette (by label). Grafana will assign color by looking up a color in a palette by the series `color` label. Useful for Graphs and pie charts and other categorical data visualizations
+    // `palette-classic-by-label`: Classic palette (by label). Grafana will assign color by looking up a color in a palette by the series `color` label. Useful for Graphs and pie charts and other categorical data visualizations
 		// `continuous-viridis`: Continuous Viridis palette mode
 		// `continuous-magma`: Continuous Magma palette mode
 		// `continuous-plasma`: Continuous Plasma palette mode
@@ -443,6 +443,8 @@ lineage: schemas: [{
 			// Value represents a specified metric for the threshold, which triggers a visual change in the dashboard when this value is met or exceeded.
 			// Nulls currently appear here when serializing -Infinity to JSON.
 			value: number | null @grafanamaturity(NeedsExpertReview)
+			// Optional dashboard-variable expression (e.g. `$myVar`) resolved at render time; `value` is the numeric fallback when the expression cannot be resolved to a single finite number.
+			valueExpr?: string
 			// Color represents the color of the visual change that will occur in the dashboard when the threshold value is met or exceeded.
 			color: string @grafanamaturity(NeedsExpertReview)
 		} @cuetsy(kind="interface") @grafanamaturity(NeedsExpertReview)

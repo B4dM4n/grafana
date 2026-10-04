@@ -1,8 +1,9 @@
 package testutil
 
 import (
+	testifymock "github.com/stretchr/testify/mock"
+
 	"github.com/grafana/grafana/pkg/api/routing"
-	"github.com/grafana/grafana/pkg/bus"
 	"github.com/grafana/grafana/pkg/infra/localcache"
 	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/services/accesscontrol/acimpl"
@@ -23,9 +24,8 @@ import (
 	"github.com/grafana/grafana/pkg/services/team/teamimpl"
 	"github.com/grafana/grafana/pkg/services/user/userimpl"
 	"github.com/grafana/grafana/pkg/setting"
-	testifymock "github.com/stretchr/testify/mock"
+	"github.com/grafana/grafana/pkg/storage/legacysql"
 
-	"github.com/grafana/grafana/pkg/storage/legacysql/dualwrite"
 	"github.com/grafana/grafana/pkg/storage/unified/resource"
 	resourcepb "github.com/grafana/grafana/pkg/storage/unified/resourcepb"
 )
@@ -44,25 +44,17 @@ func ProvideFolderPermissions(
 
 	quotaService := quotatest.New(false, nil)
 
-	fStore := folderimpl.ProvideStore(sqlStore, cfg)
-	searchMock := &resource.MockResourceClient{}
-	searchMock.On("Search", testifymock.Anything, testifymock.Anything, testifymock.Anything).Return(&resourcepb.ResourceSearchResponse{TotalHits: 0}, nil).Maybe()
-	searchMock.On("GetStats", testifymock.Anything, testifymock.Anything, testifymock.Anything).Return(&resourcepb.ResourceStatsResponse{}, nil).Maybe()
-	fService := folderimpl.ProvideService(
-		fStore, ac, bus.ProvideBus(tracing.InitializeTracerForTest()),
-		nil, sqlStore, features, supportbundlestest.NewFakeBundleService(), nil, cfg, nil, tracing.InitializeTracerForTest(), searchMock, dualwrite.ProvideTestService(), sort.ProvideService(), apiserver.WithoutRestConfig)
-
 	acSvc := acimpl.ProvideOSSService(
 		cfg, acdb.ProvideService(sqlStore), actionSets, localcache.ProvideService(),
 		features, tracing.InitializeTracerForTest(), sqlStore, permreg.ProvidePermissionRegistry(),
 		nil,
 	)
 
-	orgService, err := orgimpl.ProvideService(sqlStore, cfg, quotaService)
+	orgService, err := orgimpl.ProvideService(legacysql.NewDatabaseProvider(sqlStore), cfg, quotaService)
 	if err != nil {
 		return nil, err
 	}
-	teamSvc, err := teamimpl.ProvideService(sqlStore, cfg, tracing.InitializeTracerForTest(), nil)
+	teamSvc, err := teamimpl.ProvideService(legacysql.NewDatabaseProvider(sqlStore), cfg, tracing.InitializeTracerForTest(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +74,13 @@ func ProvideFolderPermissions(
 	if err != nil {
 		return nil, err
 	}
+
+	searchMock := &resource.MockResourceClient{}
+	searchMock.On("Search", testifymock.Anything, testifymock.Anything, testifymock.Anything).Return(&resourcepb.ResourceSearchResponse{TotalHits: 0}, nil).Maybe()
+	searchMock.On("GetStats", testifymock.Anything, testifymock.Anything, testifymock.Anything).Return(&resourcepb.ResourceStatsResponse{}, nil).Maybe()
+	fService := folderimpl.ProvideService(
+		ac,
+		userSvc, features, supportbundlestest.NewFakeBundleService(), nil, cfg, nil, tracing.InitializeTracerForTest(), searchMock, sort.ProvideService(), apiserver.WithoutRestConfig)
 
 	return ossaccesscontrol.ProvideFolderPermissions(
 		cfg,

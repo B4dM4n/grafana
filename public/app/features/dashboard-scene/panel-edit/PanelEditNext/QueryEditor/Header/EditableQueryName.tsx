@@ -6,6 +6,7 @@ import { t } from '@grafana/i18n';
 import { type DataQuery } from '@grafana/schema';
 import { useStyles2, Input, FieldValidationMessage, Icon, Text } from '@grafana/ui';
 
+import { SIDEBAR_CARD_DATA_ATTR } from '../../constants';
 import { trackRenameInitiated } from '../../tracking';
 
 interface EditableQueryNameProps {
@@ -143,7 +144,7 @@ export function EditableQueryName({ query, queries, onQueryUpdate }: EditableQue
 }
 
 function isSidebarCardElement(target: EventTarget | null) {
-  return target instanceof HTMLElement && target.closest('[data-query-sidebar-card]') !== null;
+  return target instanceof HTMLElement && target.closest(`[${SIDEBAR_CARD_DATA_ATTR}]`) !== null;
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({

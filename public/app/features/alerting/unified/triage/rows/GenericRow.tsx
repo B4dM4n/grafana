@@ -9,6 +9,9 @@ import { IconButton, Stack, useStyles2 } from '@grafana/ui';
 import { Spacer } from '../../components/Spacer';
 import { useWorkbenchContext } from '../WorkbenchContext';
 
+// Width of the md IconButton used as the expand/collapse chevron, in pixels.
+const CHEVRON_WIDTH_PX = 24;
+
 interface GenericRowProps {
   width: number;
   title: ReactNode;
@@ -27,6 +30,7 @@ interface GenericRowProps {
    * Use this for rows whose children should not be auto-expanded (e.g. AlertRuleRow instance list).
    */
   expandable?: boolean;
+  ['data-testid']?: string;
 }
 
 export const GenericRow = ({
@@ -42,6 +46,7 @@ export const GenericRow = ({
   depth = 0,
   showIndentBorder = false,
   expandable = true,
+  ['data-testid']: dataTestId,
 }: GenericRowProps) => {
   const styles = useStyles2(getStyles);
   const { expandGeneration, collapseGeneration } = useWorkbenchContext();
@@ -82,6 +87,7 @@ export const GenericRow = ({
   return (
     <>
       <div
+        data-testid={dataTestId}
         className={cx(
           styles.groupItemWrapper(width, depth, showIndentBorder),
           depth > 0 && styles.indented(depth),
@@ -121,7 +127,7 @@ const LeftCell = ({ title, metadata = null, actions = null, isOpen = true, onTog
 
   return (
     <Stack direction="row" alignItems="center" gap={0.5}>
-      {onToggle && (
+      {onToggle ? (
         <IconButton
           name={isOpen ? 'angle-down' : 'angle-right'}
           onClick={onToggle}
@@ -130,6 +136,8 @@ const LeftCell = ({ title, metadata = null, actions = null, isOpen = true, onTog
           size="md"
           aria-label={t('alerting.group-wrapper.toggle', 'Toggle group')}
         />
+      ) : (
+        <div className={styles.chevronPlaceholder} />
       )}
       <Stack direction="column" alignItems="flex-start" gap={0} flex={1}>
         <Stack direction="row" alignItems="center" gap={1} width="100%">
@@ -143,7 +151,7 @@ const LeftCell = ({ title, metadata = null, actions = null, isOpen = true, onTog
   );
 };
 
-export const getStyles = (theme: GrafanaTheme2) => {
+const getStyles = (theme: GrafanaTheme2) => {
   return {
     dropdownIcon: css({
       alignSelf: 'flex-start',
@@ -181,6 +189,10 @@ export const getStyles = (theme: GrafanaTheme2) => {
     indentBorder: css({
       borderLeft: `1px solid ${theme.colors.border.weak}`,
       paddingLeft: theme.spacing(1),
+    }),
+    chevronPlaceholder: css({
+      width: CHEVRON_WIDTH_PX,
+      flexShrink: 0,
     }),
   };
 };

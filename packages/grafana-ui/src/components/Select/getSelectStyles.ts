@@ -2,6 +2,7 @@ import { css } from '@emotion/css';
 
 import { type GrafanaTheme2 } from '@grafana/data';
 
+import { getFocusStyles } from '../../themes/mixins';
 import { stylesFactory } from '../../themes/stylesFactory';
 
 export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
@@ -9,7 +10,7 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
     menu: css({
       label: 'grafana-select-menu',
       background: theme.components.dropdown.background,
-      borderRadius: theme.shape.radius.default,
+      borderRadius: theme.shape.radius.lg,
       boxShadow: theme.shadows.z3,
       position: 'relative',
       minWidth: '100%',
@@ -65,6 +66,10 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
       '@media (forced-colors: active), (prefers-contrast: more)': {
         border: `1px solid ${theme.colors.primary.border}`,
       },
+    }),
+    optionFocusRing: css({
+      label: 'grafana-select-option-focus-ring',
+      ...getFocusStyles(theme),
     }),
     optionSelected: css({
       background: theme.colors.action.selected,

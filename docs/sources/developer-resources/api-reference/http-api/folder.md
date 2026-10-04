@@ -27,15 +27,35 @@ refs:
       destination: /docs/grafana/<GRAFANA_VERSION>/alerting
     - pattern: /docs/grafana-cloud/
       destination: /docs/grafana-cloud/alerting-and-irm/alerting/
+weight: 100
 ---
 
-# New Folders APIs
+# Folder APIs
 
-> If you are running Grafana Enterprise, for some endpoints you'll need to have specific permissions. Refer to [Role-based access control permissions](/docs/grafana/latest/administration/roles-and-permissions/access-control/custom-role-actions-scopes/) for more information.
+{{< admonition type="note" >}}
+Available in Grafana 12 and later.
 
-> To view more about the new api structure, refer to [API overview](ref:apis).
+This API complies with the new Grafana API structure. To learn more refer to documentation about the [API structure in Grafana](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/developer-resources/api-reference/http-api/apis/).
 
-### Get all folders
+**This document may not contain the latest version of the API. For the most up-to-date list of available endpoints, refer to [folder.grafana.app/v1](https://play.grafana.org/swagger?api=folder.grafana.app-v1) in Swagger.**
+
+{{< /admonition >}}
+
+## Requirements
+
+If you're running Grafana Enterprise, you'll need to have specific permissions for some endpoints. Refer to [Role-based access control permissions](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/administration/roles-and-permissions/access-control/custom-role-actions-scopes/) for more information.
+
+## Endpoints
+
+| Method | URI                                                            | Summary                                 |
+| ------ | -------------------------------------------------------------- | --------------------------------------- |
+| GET    | /apis/folder.grafana.app/v1/namespaces/:namespace/folders      | [Get all folders](#get-all-folders)     |
+| GET    | /apis/folder.grafana.app/v1/namespaces/:namespace/folders/:uid | [Get folder by uid](#get-folder-by-uid) |
+| POST   | /apis/folder.grafana.app/v1/namespaces/:namespace/folders      | [Create folder](#create-folder)         |
+| PUT    | /apis/folder.grafana.app/v1/namespaces/:namespace/folders/:uid | [Update folder](#update-folder)         |
+| DELETE | /apis/folder.grafana.app/v1/namespaces/:namespace/folders/:uid | [Delete folder](#delete-folder)         |
+
+## Get all folders
 
 `GET /apis/folder.grafana.app/v1/namespaces/:namespace/folders`
 
@@ -62,7 +82,7 @@ See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 GET /apis/folder.grafana.app/v1/namespaces/default/folders?limit=1 HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
+Authorization: Bearer <SERVICE_ACCOUNT_TOKEN>
 ```
 
 **Example Response**:
@@ -108,7 +128,7 @@ The `metadata.continue` field contains a token to fetch the next page.
 GET /apis/folder.grafana.app/v1/namespaces/default/folders?limit=1&continue=eyJvIjoxNTIsInYiOjE3NjE3MDQyMjQyMDcxODksInMiOmZhbHNlfQ== HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
+Authorization: Bearer <SERVICE_ACCOUNT_TOKEN>
 ```
 
 **Example subsequent response**:
@@ -151,7 +171,7 @@ Status Codes:
 - **401** – Unauthorized
 - **403** – Access Denied
 
-### Get folder by uid
+## Get folder by uid
 
 `GET /apis/folder.grafana.app/v1/namespaces/:namespace/folders/:uid`
 
@@ -174,7 +194,7 @@ See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 GET /apis/folder.grafana.app/v1/namespaces/default/folders/aef30vrzxs3y8d HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
+Authorization: Bearer <SERVICE_ACCOUNT_TOKEN>
 ```
 
 **Example Response**:
@@ -213,7 +233,7 @@ Status Codes:
 - **403** – Access Denied
 - **404** – Folder not found
 
-### Create folder
+## Create folder
 
 `POST /apis/folder.grafana.app/v1/namespaces/:namespace/folders`
 
@@ -238,7 +258,7 @@ See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 POST /apis/folder.grafana.app/v1/namespaces/default/folders HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
+Authorization: Bearer <SERVICE_ACCOUNT_TOKEN>
 
 {
   "metadata": {
@@ -246,10 +266,10 @@ Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
     "annotations": {
       "grafana.app/folder": "fef30w4jaxla8b"
     }
-  }
+  },
   "spec": {
     "title": "child-folder"
-  },
+  }
 }
 ```
 
@@ -299,7 +319,7 @@ Status Codes:
 - **403** – Access denied
 - **409** – Conflict (folder with the same uid already exists)
 
-### Update folder
+## Update folder
 
 `PUT /apis/folder.grafana.app/v1/namespaces/:namespace/folders/:uid`
 
@@ -322,17 +342,19 @@ See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 PUT /apis/folder.grafana.app/v1/namespaces/default/folders/fef30w4jaxla8b HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
+Authorization: Bearer <SERVICE_ACCOUNT_TOKEN>
 
-"metadata": {
+{
+  "metadata": {
     "name": "aef30vrzxs3y8d",
     "annotations": {
       "grafana.app/folder": "xkj92m5pqw3vn4"
     }
-  }
+  },
   "spec": {
     "title": "updated title"
-  },
+  }
+}
 ```
 
 JSON Body schema:
@@ -393,7 +415,7 @@ Content-Length: 97
 }
 ```
 
-### Delete folder
+## Delete folder
 
 `DELETE /apis/folder.grafana.app/v1/namespaces/:namespace/folders/:uid`
 
@@ -418,7 +440,7 @@ See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 DELETE /apis/folder.grafana.app/v1/namespaces/default/folders/fef30w4jaxla8b HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
+Authorization: Bearer <SERVICE_ACCOUNT_TOKEN>
 
 ```
 

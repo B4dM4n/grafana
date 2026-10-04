@@ -18,15 +18,17 @@ func TestIntegrationProvisioning_FixFolderMetadataJob(t *testing.T) {
 
 	const repo = "fix-folder-metadata-test-repo"
 	testRepo := common.TestRepo{
-		Name:   repo,
-		Target: "folder",
+		Name:       repo,
+		SyncTarget: "folder",
+		Workflows:  []string{"write"},
 		Copies: map[string]string{
 			"../testdata/all-panels.json": "dashboard1.json",
 		},
-		ExpectedDashboards: 1,
-		ExpectedFolders:    1,
 	}
-	helper.CreateRepo(t, testRepo)
+	helper.CreateLocalRepo(t, testRepo)
+
+	helper.RequireRepoDashboardCount(t, repo, 1)
+	helper.RequireRepoFolderCount(t, repo, 1)
 
 	t.Run("job completes successfully", func(t *testing.T) {
 		spec := provisioning.JobSpec{
@@ -79,11 +81,11 @@ func TestIntegrationProvisioning_FixFolderMetadataJob_RemovesKeepFiles(t *testin
 
 	const repo = "fix-folder-metadata-keep-files"
 	testRepo := common.TestRepo{
-		Name:                   repo,
-		Target:                 "folder",
-		SkipResourceAssertions: true,
+		Name:       repo,
+		SyncTarget: "folder",
+		Workflows:  []string{"write"},
 	}
-	helper.CreateRepo(t, testRepo)
+	helper.CreateLocalRepo(t, testRepo)
 
 	// Plant .keep files in both folder directories, mimicking legacy state
 	// where folders were tracked via .keep instead of _folder.json.

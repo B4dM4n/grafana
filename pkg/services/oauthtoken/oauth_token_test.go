@@ -24,6 +24,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/login"
 	"github.com/grafana/grafana/pkg/services/login/authinfotest"
 	"github.com/grafana/grafana/pkg/setting"
+	"github.com/grafana/grafana/pkg/storage/legacysql"
 	"github.com/grafana/grafana/pkg/tests/testsuite"
 	"github.com/grafana/grafana/pkg/util/testutil"
 )
@@ -326,12 +327,12 @@ func TestIntegration_TryTokenRefresh(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			socialConnector := socialtest.NewMockSocialConnector(t)
 
-			store := db.InitTestDB(t)
+			store := db.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 
 			env := environment{
 				sessionService:  authtest.NewMockUserAuthTokenService(t),
 				authInfoService: authinfotest.NewMockAuthInfoService(t),
-				serverLock:      serverlock.ProvideService(store, tracing.InitializeTracerForTest()),
+				serverLock:      serverlock.ProvideService(legacysql.NewDatabaseProvider(store), tracing.InitializeTracerForTest()),
 				socialConnector: socialConnector,
 				socialService: &socialtest.FakeSocialService{
 					ExpectedConnector: socialConnector,
@@ -626,12 +627,12 @@ func TestIntegration_TryTokenRefresh_WithExternalSessions(t *testing.T) {
 		t.Run(tt.desc, func(t *testing.T) {
 			socialConnector := socialtest.NewMockSocialConnector(t)
 
-			store := db.InitTestDB(t)
+			store := db.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 
 			env := environment{
 				sessionService:  authtest.NewMockUserAuthTokenService(t),
 				authInfoService: authinfotest.NewMockAuthInfoService(t),
-				serverLock:      serverlock.ProvideService(store, tracing.InitializeTracerForTest()),
+				serverLock:      serverlock.ProvideService(legacysql.NewDatabaseProvider(store), tracing.InitializeTracerForTest()),
 				socialConnector: socialConnector,
 				socialService: &socialtest.FakeSocialService{
 					ExpectedConnector: socialConnector,
@@ -1074,13 +1075,13 @@ func TestIntegration_GetCurrentOAuthToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			socialConnector := socialtest.NewMockSocialConnector(t)
-			store := db.InitTestDB(t)
+			store := db.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 			features := featuremgmt.WithFeatures()
 
 			env := environment{
 				sessionService:  authtest.NewMockUserAuthTokenService(t),
 				authInfoService: authinfotest.NewMockAuthInfoService(t),
-				serverLock:      serverlock.ProvideService(store, tracing.InitializeTracerForTest()),
+				serverLock:      serverlock.ProvideService(legacysql.NewDatabaseProvider(store), tracing.InitializeTracerForTest()),
 				socialConnector: socialConnector,
 				socialService: &socialtest.FakeSocialService{
 					ExpectedConnector: socialConnector,
@@ -1374,13 +1375,13 @@ func TestIntegration_GetCurrentOAuthToken_WithExternalSessions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			socialConnector := socialtest.NewMockSocialConnector(t)
-			store := db.InitTestDB(t)
+			store := db.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 			features := featuremgmt.WithFeatures(featuremgmt.FlagImprovedExternalSessionHandling)
 
 			env := environment{
 				sessionService:  authtest.NewMockUserAuthTokenService(t),
 				authInfoService: authinfotest.NewMockAuthInfoService(t),
-				serverLock:      serverlock.ProvideService(store, tracing.InitializeTracerForTest()),
+				serverLock:      serverlock.ProvideService(legacysql.NewDatabaseProvider(store), tracing.InitializeTracerForTest()),
 				socialConnector: socialConnector,
 				socialService: &socialtest.FakeSocialService{
 					ExpectedConnector: socialConnector,
