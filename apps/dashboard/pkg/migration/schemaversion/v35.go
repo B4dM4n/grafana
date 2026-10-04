@@ -45,20 +45,45 @@ func V35(_ context.Context, dashboard map[string]interface{}) error {
 
 	for _, panel := range panels {
 		p, ok := panel.(map[string]interface{})
-		if !ok || p["type"] != "timeseries" {
+		if !ok {
 			continue
 		}
 
-		applyXAxisVisibilityOverride(p)
+		migratePanelV35(p)
+
+		// Handle nested panels in collapsed rows
+		if !IsArray(p["panels"]) {
+			continue
+		}
+		for _, nestedPanel := range p["panels"].([]interface{}) {
+			np, ok := nestedPanel.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			migratePanelV35(np)
+		}
 	}
 
 	return nil
 }
 
+// migratePanelV35 applies the x-axis visibility override to a single timeseries panel.
+func migratePanelV35(panel map[string]interface{}) {
+	if panel["type"] != "timeseries" {
+		return
+	}
+	applyXAxisVisibilityOverride(panel)
+}
+
 // applyXAxisVisibilityOverride adds a field override to ensure x-axis visibility
 // when the panel's default axis placement is set to hidden.
 func applyXAxisVisibilityOverride(panel map[string]interface{}) {
-	fieldConfig, _ := panel["fieldConfig"].(map[string]interface{})
+	fieldConfig, ok := panel["fieldConfig"].(map[string]interface{})
+	if !ok {
+		// Only process panels that already have fieldConfig (matches frontend behavior)
+		return
+	}
+
 	defaults, _ := fieldConfig["defaults"].(map[string]interface{})
 	custom, _ := defaults["custom"].(map[string]interface{})
 

@@ -40,7 +40,7 @@
       "name": "created",
       "type": "number",
       "format": "int64",
-      "description": "created timestamp",
+      "description": "created timestamp (unix millis)",
       "priority": 0
     },
     {
@@ -66,7 +66,7 @@
         null,
         null,
         null,
-        null,
+        0,
         321,
         null
       ],
@@ -75,8 +75,7 @@
         "apiVersion": "folder.grafana.app",
         "metadata": {
           "name": "yyy",
-          "namespace": "ns",
-          "creationTimestamp": null
+          "namespace": "ns"
         }
       }
     },
@@ -87,7 +86,7 @@
         null,
         null,
         null,
-        null,
+        0,
         123,
         "repo"
       ],
@@ -96,8 +95,7 @@
         "apiVersion": "folder.grafana.app",
         "metadata": {
           "name": "zzz",
-          "namespace": "ns",
-          "creationTimestamp": null
+          "namespace": "ns"
         }
       }
     }

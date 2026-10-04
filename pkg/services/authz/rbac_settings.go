@@ -23,9 +23,10 @@ const (
 )
 
 type authzClientSettings struct {
-	remoteAddress string
-	certFile      string
-	mode          clientMode
+	remoteAddress        string
+	certFile             string
+	mode                 clientMode
+	loadBalancingEnabled bool
 
 	token            string
 	tokenExchangeURL string
@@ -51,6 +52,7 @@ func readAuthzClientSettings(cfg *setting.Cfg) (*authzClientSettings, error) {
 	if s.mode == clientModeInproc {
 		return s, nil
 	}
+	s.loadBalancingEnabled = authzSection.Key("load_balancing_enabled").MustBool(false)
 
 	s.remoteAddress = authzSection.Key("remote_address").MustString("")
 	s.certFile = authzSection.Key("cert_file").MustString("")
@@ -68,14 +70,15 @@ func readAuthzClientSettings(cfg *setting.Cfg) (*authzClientSettings, error) {
 }
 
 type RBACServerSettings struct {
-	Folder   FolderAPISettings
-	CacheTTL time.Duration
+	Folder              FolderAPISettings
+	CacheTTL            time.Duration
+	LocalFolderCacheTTL time.Duration
 }
 
 type FolderAPISettings struct {
 	// Host is hostname for folder api
 	Host string
-	// Insecure will skip verification of ceritificates. Should only be used for testing
+	// Insecure will skip verification of certificates. Should only be used for testing
 	Insecure bool
 	// CAFile is a filepath to trusted root certificates for server
 	CAFile string

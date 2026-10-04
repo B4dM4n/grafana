@@ -1,33 +1,45 @@
 import { skipToken } from '@reduxjs/toolkit/query';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom-v5-compat';
 
 import { AppEvents } from '@grafana/data';
 import { Trans, t } from '@grafana/i18n';
-import { getAppEvents } from '@grafana/runtime';
+import { getAppEvents, reportInteraction } from '@grafana/runtime';
 import { Alert, Button, Drawer, Field, Input, Spinner, Stack } from '@grafana/ui';
 import { useGetFolderQuery } from 'app/api/clients/folder/v1beta1';
 import {
-  RepositoryView,
+  type Job,
+  type RepositoryView,
   useCreateRepositoryFilesWithPathMutation,
   useGetRepositoryFilesWithPathQuery,
 } from 'app/api/clients/provisioning/v0alpha1';
 import { AnnoKeySourcePath } from 'app/features/apiserver/types';
-import { DashboardScene } from 'app/features/dashboard-scene/scene/DashboardScene';
+import { type DashboardScene } from 'app/features/dashboard-scene/scene/DashboardScene';
+import { JobStatus } from 'app/features/provisioning/Job/JobStatus';
+import { type StepStatusInfo } from 'app/features/provisioning/Wizard/types';
 
-import { ProvisionedOperationInfo, useProvisionedRequestHandler } from '../../hooks/useProvisionedRequestHandler';
-import { ProvisionedDashboardFormData } from '../../types/form';
+import { ProvisioningAlert } from '../../Shared/ProvisioningAlert';
+import { useBranchTemplate } from '../../hooks/useBranchTemplate';
+import { useCommitMessageTemplate } from '../../hooks/useCommitMessageTemplate';
+import { type ProvisionedOperationInfo, useProvisionedRequestHandler } from '../../hooks/useProvisionedRequestHandler';
+import { usePullRequestTitle } from '../../hooks/usePullRequestTitle';
+import { type StatusInfo } from '../../types';
+import { type ProvisionedDashboardFormData } from '../../types/form';
+import { type CommitTemplateVars } from '../../utils/commitMessage';
+import { getCurrentCommitUser } from '../../utils/currentUser';
 import { buildResourceBranchRedirectUrl } from '../../utils/redirect';
-import { getTargetFolderPathInRepo } from '../BulkActions/utils';
+import { useBulkActionJob } from '../BulkActions/useBulkActionJob';
+import { getTargetFolderPathInRepo, isResourceAlreadyInTarget } from '../BulkActions/utils';
 import { ResourceEditFormSharedFields } from '../Shared/ResourceEditFormSharedFields';
+import { joinPath } from '../utils/path';
 
 export interface Props {
   dashboard: DashboardScene;
   defaultValues: ProvisionedDashboardFormData;
   readOnly: boolean;
   isNew?: boolean;
-  workflowOptions: Array<{ label: string; value: string }>;
+  canPushToConfiguredBranch: boolean;
   loadedFromRef?: string;
   targetFolderUID?: string;
   targetFolderTitle?: string;
@@ -42,7 +54,7 @@ export function MoveProvisionedDashboardForm({
   loadedFromRef,
   readOnly,
   isNew,
-  workflowOptions,
+  canPushToConfiguredBranch,
   targetFolderUID,
   targetFolderTitle,
   repository,
@@ -57,6 +69,31 @@ export function MoveProvisionedDashboardForm({
 
   const [ref, workflow] = watch(['ref', 'workflow']);
 
+  const templateVars: CommitTemplateVars = {
+    action: 'move',
+    resourceKind: 'dashboard',
+    resourceID: dashboard.state.meta.uid ?? dashboard.state.meta.k8s?.name ?? '',
+    title: dashboard.state.title ?? '',
+    ...getCurrentCommitUser(),
+  };
+  const { locked, message } = useCommitMessageTemplate({
+    repository,
+    vars: templateVars,
+    comment: watch('comment') ?? '',
+    isCommentDirty: Boolean(methods.formState.dirtyFields.comment),
+    setComment: (value) => methods.setValue('comment', value, { shouldDirty: false }),
+  });
+
+  const { locked: lockBranch } = useBranchTemplate({
+    repository,
+    vars: templateVars,
+    workflow,
+    value: ref ?? '',
+    setBranch: (value) => methods.setValue('ref', value, { shouldDirty: false }),
+  });
+
+  const { prTitle } = usePullRequestTitle({ repository, vars: templateVars, workflow });
+
   const { data: currentFileData, isLoading: isLoadingFileData } = useGetRepositoryFilesWithPathQuery({
     name: defaultValues.repo,
     path: defaultValues.path,
@@ -64,8 +101,12 @@ export function MoveProvisionedDashboardForm({
 
   const { data: targetFolder } = useGetFolderQuery(targetFolderUID ? { name: targetFolderUID! } : skipToken);
 
+  const { createBulkJob, isLoading: isCreatingJob } = useBulkActionJob();
   const [moveFile, moveRequest] = useCreateRepositoryFilesWithPathMutation();
   const [targetPath, setTargetPath] = useState<string>('');
+  const [job, setJob] = useState<Job>();
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [jobError, setJobError] = useState<string | StatusInfo>();
 
   const navigate = useNavigate();
 
@@ -82,91 +123,164 @@ export function MoveProvisionedDashboardForm({
       repoName: repository?.name,
       hidePrependSlash: true,
     });
-    const newPath = `${targetFolderPath}${filename}`;
+    const newPath = joinPath(targetFolderPath ?? '', filename ?? '');
     setTargetPath(newPath);
   }, [currentFileData, targetFolder, targetFolderUID, targetFolderTitle, repository]);
 
-  const handleSubmitForm = async ({ repo, path, comment }: ProvisionedDashboardFormData) => {
-    if (!currentFileData?.resource?.file) {
-      appEvents.publish({
-        type: AppEvents.alertError.name,
-        payload: [
-          t(
-            'dashboard-scene.move-provisioned-dashboard-form.current-file-not-found',
-            'Current dashboard file could not be found'
-          ),
-        ],
-      });
-      return;
-    }
+  // Helper function to show error messages
+  const showError = (error?: unknown) => {
+    const payload = [t('dashboard-scene.move-provisioned-dashboard-form.api-error', 'Failed to move dashboard'), error];
 
-    const branchRef = workflow === 'write' ? loadedFromRef : ref;
-    const commitMessage = comment || `Move dashboard: ${dashboard.state.title}`;
-
-    try {
-      await moveFile({
-        name: repo,
-        path: targetPath,
-        ref: branchRef,
-        message: commitMessage,
-        body: currentFileData.resource.file,
-        originalPath: path,
-      }).unwrap();
-    } catch (error) {
-      appEvents.publish({
-        type: AppEvents.alertError.name,
-        payload: [t('dashboard-scene.move-provisioned-dashboard-form.api-error', 'Failed to move dashboard'), error],
-      });
-    }
+    appEvents.publish({
+      type: AppEvents.alertError.name,
+      payload,
+    });
   };
 
-  const onWriteSuccess = () => {
-    dashboard.setState({ isDirty: false });
-    panelEditor?.onDiscard();
-    if (targetFolderUID && targetFolderTitle) {
-      onSuccess(targetFolderUID, targetFolderTitle);
-    }
-    navigate('/dashboards');
-  };
-
-  const onBranchSuccess = (info: ProvisionedOperationInfo) => {
+  const onBranchSuccess = (urls: Record<string, string> | undefined, info: ProvisionedOperationInfo) => {
     dashboard.setState({ isDirty: false });
     panelEditor?.onDiscard();
     const url = buildResourceBranchRedirectUrl({
       paramName: 'new_pull_request_url',
-      paramValue: moveRequest?.data?.urls?.newPullRequestURL,
+      paramValue: urls?.newPullRequestURL,
       repoType: info.repoType,
+      prTitle,
     });
     navigate(url);
   };
 
-  const onError = (error: unknown) => {
-    getAppEvents().publish({
-      type: AppEvents.alertError.name,
-      payload: [
-        t('dashboard-scene.move-provisioned-dashboard-form.alert-error-moving-dashboard', 'Error moving dashboard'),
-        error,
-      ],
-    });
-  };
-
-  useProvisionedRequestHandler({
-    request: moveRequest,
+  const { handleSuccess } = useProvisionedRequestHandler({
     workflow,
+    resourceType: 'dashboard',
+    repository,
+    selectedBranch: ref || loadedFromRef,
     successMessage: t(
       'dashboard-scene.move-provisioned-dashboard-form.success-message',
       'Dashboard moved successfully'
     ),
-    resourceType: 'dashboard',
     handlers: {
-      onBranchSuccess: (_, info) => onBranchSuccess(info),
-      onWriteSuccess,
+      onBranchSuccess: ({ urls }, info) => onBranchSuccess(urls, info),
       onDismiss,
-      onError,
     },
   });
 
-  const isLoading = moveRequest.isLoading;
+  const handleSubmitForm = async ({ repo, path }: ProvisionedDashboardFormData) => {
+    if (!repo || !repository) {
+      showError();
+      return;
+    }
+
+    const targetFolderPath = getTargetFolderPathInRepo({
+      targetFolderUID,
+      targetFolder,
+      repoName: repository?.name,
+    });
+
+    if (!targetFolderPath) {
+      showError();
+      return;
+    }
+
+    const currentSourcePath = currentFileData?.resource?.dryRun?.metadata?.annotations?.[AnnoKeySourcePath];
+    if (currentSourcePath && isResourceAlreadyInTarget(currentSourcePath, targetFolderPath)) {
+      showError(
+        t(
+          'dashboard-scene.move-provisioned-dashboard-form.already-in-folder',
+          'Dashboard is already in the selected folder.'
+        )
+      );
+      return;
+    }
+
+    reportInteraction('grafana_provisioning_dashboard_move_submitted', {
+      workflow,
+      repositoryName: repo,
+      repositoryType: repository?.type ?? 'unknown',
+    });
+
+    // Branch workflow: use /files API for direct file operations
+    if (workflow === 'branch') {
+      if (!currentFileData?.resource?.file) {
+        appEvents.publish({
+          type: AppEvents.alertError.name,
+          payload: [
+            t(
+              'dashboard-scene.move-provisioned-dashboard-form.current-file-not-found',
+              'Current dashboard file could not be found'
+            ),
+          ],
+        });
+        return;
+      }
+
+      const branchRef = ref;
+
+      try {
+        const data = await moveFile({
+          name: repo,
+          path: targetPath,
+          ref: branchRef,
+          message,
+          body: currentFileData.resource.file,
+          originalPath: path,
+        }).unwrap();
+        handleSuccess(data);
+      } catch (error) {
+        showError(error);
+      }
+      return;
+    }
+
+    // Write workflow: use Job API
+    const effectiveRef = isNew ? undefined : loadedFromRef;
+    const jobSpec = {
+      action: 'move' as const,
+      message,
+      move: {
+        ref: effectiveRef,
+        targetPath: targetFolderPath,
+        resources: [
+          {
+            name: dashboard.state.meta.uid ?? dashboard.state.meta.k8s?.name ?? '',
+            group: 'dashboard.grafana.app' as const,
+            kind: 'Dashboard' as const,
+          },
+        ],
+      },
+    };
+
+    try {
+      const result = await createBulkJob(repository, jobSpec);
+      if (!result.success) {
+        showError();
+        return;
+      }
+
+      if (result.job) {
+        setJob(result.job);
+        setHasSubmitted(true);
+      }
+    } catch (error) {
+      showError(error);
+    }
+  };
+
+  const handleJobStatusChange = useCallback(
+    (statusInfo: StepStatusInfo) => {
+      if (statusInfo.status === 'success') {
+        dashboard.setState({ isDirty: false });
+        panelEditor?.onDiscard();
+        navigate('/dashboards');
+      }
+
+      if (statusInfo.status === 'error' && statusInfo.error) {
+        setJobError(statusInfo.error);
+      }
+    },
+    [dashboard, panelEditor, navigate]
+  );
+
+  const isLoading = isCreatingJob || moveRequest.isLoading;
 
   return (
     <Drawer
@@ -174,76 +288,91 @@ export function MoveProvisionedDashboardForm({
       subtitle={dashboard.state.title}
       onClose={onDismiss}
     >
-      <FormProvider {...methods}>
-        <form onSubmit={handleSubmit(handleSubmitForm)}>
-          <Stack direction="column" gap={2}>
-            {readOnly && (
-              <Alert
-                title={t(
-                  'dashboard-scene.move-provisioned-dashboard-form.title-this-repository-is-read-only',
-                  'This repository is read only'
-                )}
-              >
-                <Trans i18nKey="dashboard-scene.move-provisioned-dashboard-form.move-read-only-message">
-                  This dashboard cannot be moved directly from Grafana because the repository is read-only. To move this
-                  dashboard, please move the file in your Git repository.
-                </Trans>
-              </Alert>
-            )}
+      {hasSubmitted && job ? (
+        <>
+          <ProvisioningAlert error={jobError} />
+          <JobStatus watch={job} jobType="move" onStatusChange={handleJobStatusChange} />
+        </>
+      ) : (
+        <FormProvider {...methods}>
+          <form onSubmit={handleSubmit(handleSubmitForm)}>
+            <Stack direction="column" gap={2}>
+              {readOnly && (
+                <Alert
+                  title={t(
+                    'dashboard-scene.move-provisioned-dashboard-form.title-this-repository-is-read-only',
+                    'This repository is read only'
+                  )}
+                >
+                  <Trans i18nKey="dashboard-scene.move-provisioned-dashboard-form.move-read-only-message">
+                    This dashboard cannot be moved directly from Grafana because the repository is read-only. To move
+                    this dashboard, please move the file in your Git repository.
+                  </Trans>
+                </Alert>
+              )}
 
-            {isLoadingFileData && (
-              <Stack alignItems="center" gap={2}>
-                <Spinner />
-                <div>
-                  {t('dashboard-scene.move-provisioned-dashboard-form.loading-file-data', 'Loading dashboard data')}
-                </div>
+              {isLoadingFileData && (
+                <Stack alignItems="center" gap={2}>
+                  <Spinner />
+                  <div>
+                    {t(
+                      'dashboard-scene.move-provisioned-dashboard-form.loading-dashboard-data',
+                      'Loading dashboard data'
+                    )}
+                  </div>
+                </Stack>
+              )}
+
+              {currentFileData?.errors?.length && currentFileData.errors.length > 0 && (
+                <Alert
+                  title={t(
+                    'dashboard-scene.move-provisioned-dashboard-form.file-load-error',
+                    'Error loading dashboard'
+                  )}
+                  severity="error"
+                >
+                  {currentFileData.errors.map((error, index) => (
+                    <div key={index}>{error}</div>
+                  ))}
+                </Alert>
+              )}
+
+              <Field
+                noMargin
+                label={t('dashboard-scene.move-provisioned-dashboard-form.target-path-label', 'Target path')}
+              >
+                <Input readOnly value={targetPath} />
+              </Field>
+
+              <ResourceEditFormSharedFields
+                resourceType="dashboard"
+                isNew={isNew}
+                readOnly={readOnly}
+                canPushToConfiguredBranch={canPushToConfiguredBranch}
+                repository={repository}
+                lockComment={locked}
+                commitMessage={message}
+                lockBranch={lockBranch}
+              />
+
+              <Stack gap={2}>
+                <Button variant="secondary" onClick={onDismiss} fill="outline">
+                  <Trans i18nKey="dashboard-scene.move-provisioned-dashboard-form.cancel-action">Cancel</Trans>
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={isLoading || readOnly || isLoadingFileData || !currentFileData?.resource?.file}
+                >
+                  {isLoading
+                    ? t('dashboard-scene.move-provisioned-dashboard-form.moving', 'Moving...')
+                    : t('dashboard-scene.move-provisioned-dashboard-form.move-action', 'Move dashboard')}
+                </Button>
               </Stack>
-            )}
-
-            {currentFileData?.errors?.length && currentFileData.errors.length > 0 && (
-              <Alert
-                title={t('dashboard-scene.move-provisioned-dashboard-form.file-load-error', 'Error loading dashboard')}
-                severity="error"
-              >
-                {currentFileData.errors.map((error, index) => (
-                  <div key={index}>{error}</div>
-                ))}
-              </Alert>
-            )}
-
-            <Field
-              noMargin
-              label={t('dashboard-scene.move-provisioned-dashboard-form.target-path-label', 'Target path')}
-            >
-              <Input readOnly value={targetPath} />
-            </Field>
-
-            <ResourceEditFormSharedFields
-              resourceType="dashboard"
-              isNew={isNew}
-              readOnly={readOnly}
-              workflow={workflow}
-              workflowOptions={workflowOptions}
-              repository={repository}
-            />
-
-            <Stack gap={2}>
-              <Button variant="secondary" onClick={onDismiss} fill="outline">
-                <Trans i18nKey="dashboard-scene.move-provisioned-dashboard-form.cancel-action">Cancel</Trans>
-              </Button>
-              <Button
-                variant="primary"
-                type="submit"
-                disabled={isLoading || readOnly || !currentFileData || isLoadingFileData}
-              >
-                {isLoading
-                  ? t('dashboard-scene.move-provisioned-dashboard-form.moving', 'Moving...')
-                  : t('dashboard-scene.move-provisioned-dashboard-form.move-action', 'Move dashboard')}
-              </Button>
             </Stack>
-          </Stack>
-        </form>
-      </FormProvider>
+          </form>
+        </FormProvider>
+      )}
     </Drawer>
   );
 }

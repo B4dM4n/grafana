@@ -1,5 +1,6 @@
-import { DataFrame, Field, FieldType } from '../types/dataFrame';
-import { TimeRange } from '../types/time';
+import { type GrafanaTheme2 } from '../themes/types';
+import { type DataFrame, type Field, FieldType } from '../types/dataFrame';
+import { type TimeRange } from '../types/time';
 
 import { getTimeField } from './processDataFrame';
 
@@ -126,26 +127,22 @@ export function addRow(dataFrame: DataFrame, row: Record<string, unknown> | unkn
 }
 
 /**
- * Aligns time range comparison data by adjusting timestamps and applying compare-specific styling
+ * Aligns time range comparison data by adjusting timestamps and applying compare-specific styling.
+ * Returns a new DataFrame with new field objects rather than mutating the input - callers (e.g.
+ * streaming/split-chunk query paths) may not own the frame or its fields, so mutating them in place
+ * can corrupt state shared elsewhere (e.g. a datasource's response accumulator).
  * @param series - The DataFrame containing the comparison data
  * @param diff - The time difference in milliseconds to align the timestamps
- * @param compareColor - Optional color to use for the comparison series (defaults to 'gray')
+ * @param theme - The Grafana theme for color calculations
  */
-export function alignTimeRangeCompareData(series: DataFrame, diff: number, compareColor = 'gray') {
-  series.fields.forEach((field: Field) => {
+export function alignTimeRangeCompareData(series: DataFrame, diff: number, theme: GrafanaTheme2): DataFrame {
+  const fields = series.fields.map((field: Field): Field => {
     // Align compare series time stamps with reference series
-    if (field.type === FieldType.time) {
-      field.values = field.values.map((v: number) => {
-        return diff < 0 ? v - diff : v + diff;
-      });
-    }
+    const values =
+      field.type === FieldType.time ? field.values.map((v: number) => (diff < 0 ? v - diff : v + diff)) : field.values;
 
-    field.config = {
+    const config = {
       ...(field.config ?? {}),
-      color: {
-        mode: 'fixed',
-        fixedColor: compareColor,
-      },
       custom: {
         ...(field.config?.custom ?? {}),
         timeCompare: {
@@ -154,7 +151,22 @@ export function alignTimeRangeCompareData(series: DataFrame, diff: number, compa
         },
       },
     };
+
+    // Apply visual styling for comparison series
+    if (field.type === FieldType.number || field.type === FieldType.boolean || field.type === FieldType.enum) {
+      config.custom = {
+        ...config.custom,
+        lineStyle: {
+          fill: 'dash',
+          dash: [1, 5, 4, 5],
+        },
+      };
+    }
+
+    return { ...field, values, config };
   });
+
+  return { ...series, fields };
 }
 
 /**

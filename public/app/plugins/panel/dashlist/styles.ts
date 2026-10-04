@@ -1,53 +1,65 @@
 import { css } from '@emotion/css';
 
-import { GrafanaTheme2 } from '@grafana/data';
+import { type GrafanaTheme2, colorManipulator } from '@grafana/data';
 
 export const getStyles = (theme: GrafanaTheme2) => {
+  const gradient = `linear-gradient(
+    90deg,
+    ${colorManipulator.alpha(theme.colors.primary.text, 0.1)} 0%,
+    ${colorManipulator.alpha(theme.colors.secondary.main, 0.1)} 100%
+  )`;
+
   return {
-    dashlistSectionHeader: css({
-      padding: theme.spacing(0.25, 1),
-      marginRight: theme.spacing(1),
+    dashlistCardContainer: css({
+      display: 'block',
+      height: '100%',
+      paddingLeft: theme.spacing(2),
+
+      '&:has(a:hover)': {
+        backgroundImage: gradient,
+        color: theme.colors.text.primary,
+      },
     }),
-    dashlistSection: css({
-      marginBottom: theme.spacing(2),
-      paddingTop: theme.spacing(0.5),
-    }),
-    dashlistLink: css({
+    dashlistCard: css({
       display: 'flex',
-      cursor: 'pointer',
-      borderBottom: `1px solid ${theme.colors.border.weak}`,
-      margin: theme.spacing(1),
-      padding: theme.spacing(1),
-      alignItems: 'center',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      gap: theme.spacing(0.75),
+      height: '100%',
+      width: '100%',
 
       '&:hover': {
-        a: {
-          color: theme.colors.text.link,
-          textDecoration: 'underline',
+        '> div': {
+          '&:first-child': {
+            color: theme.colors.text.link,
+            textDecoration: 'underline',
+          },
         },
       },
     }),
-    dashlistFolder: css({
-      color: theme.colors.text.secondary,
-      fontSize: theme.typography.bodySmall.fontSize,
-      lineHeight: theme.typography.body.lineHeight,
+    dashlistCardIcon: css({
+      marginRight: theme.spacing(0.25),
+      marginTop: theme.spacing(0.25),
     }),
-    dashlistTitle: css({
-      '&::after': {
-        position: 'absolute',
-        content: '""',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        right: 0,
+    dashlistCardLink: css({
+      paddingTop: theme.spacing(0.5),
+      whiteSpace: 'normal',
+      overflowWrap: 'break-word',
+      wordBreak: 'break-word',
+      display: '-webkit-box',
+      WebkitBoxOrient: 'vertical',
+      WebkitLineClamp: 2,
+      overflow: 'hidden',
+      [theme.breakpoints.down('lg')]: {
+        WebkitLineClamp: 1,
       },
     }),
-    dashlistLinkBody: css({
-      flexGrow: 1,
-    }),
-    dashlistItem: css({
-      position: 'relative',
-      listStyle: 'none',
+    dashlistCardFolder: css({
+      display: '-webkit-box',
+      WebkitBoxOrient: 'vertical',
+      WebkitLineClamp: 1,
+      overflow: 'hidden',
+      whiteSpace: 'normal',
     }),
   };
 };

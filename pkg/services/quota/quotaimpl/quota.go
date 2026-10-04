@@ -8,10 +8,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/grafana/grafana/pkg/configprovider"
-	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/log"
 	contextmodel "github.com/grafana/grafana/pkg/services/contexthandler/model"
 	"github.com/grafana/grafana/pkg/services/quota"
+	"github.com/grafana/grafana/pkg/storage/legacysql"
 )
 
 // tracer is the global tracer for the quota service. Tracer pulls the globally
@@ -57,10 +57,10 @@ type service struct {
 	targetToSrv *quota.TargetToSrv
 }
 
-func ProvideService(ctx context.Context, db db.DB, configProvider configprovider.ConfigProvider) quota.Service {
+func ProvideService(ctx context.Context, sql legacysql.LegacyDatabaseProvider, configProvider configprovider.ConfigProvider) quota.Service {
 	logger := log.New("quota_service")
 	s := service{
-		store:         &sqlStore{db: db, logger: logger},
+		store:         &sqlStore{sql: sql, logger: logger},
 		cfg:           configProvider,
 		logger:        logger,
 		reporters:     make(map[quota.TargetSrv]quota.UsageReporterFunc),
@@ -76,7 +76,8 @@ func ProvideService(ctx context.Context, db db.DB, configProvider configprovider
 }
 
 func (s *service) IsDisabled(ctx context.Context) bool {
-	return !s.cfg.Get(ctx).Quota.Enabled
+	c, err := s.cfg.Get(ctx)
+	return err != nil || !c.Quota.Enabled
 }
 
 // QuotaReached checks that quota is reached for a target. Runs CheckQuotaReached and take context and scope parameters from the request context

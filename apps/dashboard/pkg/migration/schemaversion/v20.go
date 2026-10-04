@@ -3,8 +3,6 @@ package schemaversion
 import (
 	"context"
 	"regexp"
-
-	"github.com/grafana/grafana/apps/dashboard/pkg/migration/utils"
 )
 
 // V20 migrates legacy variable syntax in data links and field options.
@@ -79,20 +77,38 @@ func V20(_ context.Context, dashboard map[string]interface{}) error {
 			continue
 		}
 
-		// Update data links and field options in panel options
-		if options, ok := panel["options"].(map[string]interface{}); ok {
-			updateDataLinksVariableSyntax(options)
-			updateFieldOptionsVariableSyntax(options)
+		migratePanelV20(panel)
+
+		// Handle nested panels in collapsed rows
+		if !IsArray(panel["panels"]) {
+			continue
+		}
+		for _, nestedPanel := range panel["panels"].([]interface{}) {
+			np, ok := nestedPanel.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			migratePanelV20(np)
 		}
 	}
 
 	return nil
 }
 
+// migratePanelV20 updates legacy variable syntax in a single panel's data links and field options.
+func migratePanelV20(panel map[string]interface{}) {
+	options, ok := panel["options"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	updateDataLinksVariableSyntax(options)
+	updateFieldOptionsVariableSyntax(options)
+}
+
 // updateDataLinksVariableSyntax updates variable syntax in panel data links
 func updateDataLinksVariableSyntax(options map[string]interface{}) {
 	dataLinks, ok := options["dataLinks"].([]interface{})
-	if !ok || !utils.IsArray(dataLinks) {
+	if !ok || !IsArray(dataLinks) {
 		return
 	}
 
@@ -124,7 +140,7 @@ func updateFieldOptionsVariableSyntax(options map[string]interface{}) {
 
 	// Update field option links
 	links, ok := defaults["links"].([]interface{})
-	if !ok || !utils.IsArray(links) {
+	if !ok || !IsArray(links) {
 		return
 	}
 

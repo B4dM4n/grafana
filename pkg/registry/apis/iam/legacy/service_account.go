@@ -2,13 +2,13 @@ package legacy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	claims "github.com/grafana/authlib/types"
 
 	"github.com/grafana/grafana/pkg/registry/apis/iam/common"
+	"github.com/grafana/grafana/pkg/services/serviceaccounts"
 	"github.com/grafana/grafana/pkg/services/sqlstore/session"
 	"github.com/grafana/grafana/pkg/storage/legacysql"
 	"github.com/grafana/grafana/pkg/storage/unified/sql/sqltemplate"
@@ -55,7 +55,7 @@ func (s *legacySQLStore) GetServiceAccountInternalID(
 		return nil, fmt.Errorf("expected non zero org id")
 	}
 
-	sql, err := s.sql(ctx)
+	sql, err := s.getDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *legacySQLStore) GetServiceAccountInternalID(
 	}
 
 	if !rows.Next() {
-		return nil, errors.New("service account not found")
+		return nil, serviceaccounts.ErrServiceAccountNotFound.Errorf("service account by uid %q", query.UID)
 	}
 
 	var id int64
@@ -121,8 +121,8 @@ type CreateServiceAccountCommand struct {
 	Role       string
 	IsDisabled bool
 	OrgID      int64
-	Created    DBTime
-	Updated    DBTime
+	Created    legacysql.DBTime
+	Updated    legacysql.DBTime
 	LastSeenAt time.Time
 }
 
@@ -153,6 +153,9 @@ func (r listServiceAccountsQuery) Validate() error {
 }
 
 func (s *legacySQLStore) ListServiceAccounts(ctx context.Context, ns claims.NamespaceInfo, query ListServiceAccountsQuery) (*ListServiceAccountResult, error) {
+	if query.Pagination.Limit < 1 {
+		query.Pagination.Limit = common.DefaultListLimit
+	}
 	// for continue
 	query.Pagination.Limit += 1
 	query.OrgID = ns.OrgID
@@ -160,7 +163,7 @@ func (s *legacySQLStore) ListServiceAccounts(ctx context.Context, ns claims.Name
 		return nil, fmt.Errorf("expected non zero orgID")
 	}
 
-	sql, err := s.sql(ctx)
+	sql, err := s.getDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -208,104 +211,6 @@ func (s *legacySQLStore) ListServiceAccounts(ctx context.Context, ns claims.Name
 	return res, err
 }
 
-type ListServiceAccountTokenQuery struct {
-	// UID is the service account uid.
-	UID        string
-	OrgID      int64
-	Pagination common.Pagination
-}
-
-type ListServiceAccountTokenResult struct {
-	Items    []ServiceAccountToken
-	Continue int64
-	RV       int64
-}
-
-type ServiceAccountToken struct {
-	ID       int64
-	Name     string
-	Revoked  bool
-	Expires  *int64
-	LastUsed *time.Time
-	Created  time.Time
-	Updated  time.Time
-}
-
-var sqlQueryServiceAccountTokensTemplate = mustTemplate("service_account_tokens_query.sql")
-
-func newListServiceAccountTokens(sql *legacysql.LegacyDatabaseHelper, q *ListServiceAccountTokenQuery) listServiceAccountTokensQuery {
-	return listServiceAccountTokensQuery{
-		SQLTemplate:  sqltemplate.New(sql.DialectForDriver()),
-		UserTable:    sql.Table("user"),
-		OrgUserTable: sql.Table("org_user"),
-		TokenTable:   sql.Table("api_key"),
-		Query:        q,
-	}
-}
-
-type listServiceAccountTokensQuery struct {
-	sqltemplate.SQLTemplate
-	Query        *ListServiceAccountTokenQuery
-	UserTable    string
-	TokenTable   string
-	OrgUserTable string
-}
-
-func (listServiceAccountTokensQuery) Validate() error {
-	return nil // TODO
-}
-
-func (s *legacySQLStore) ListServiceAccountTokens(ctx context.Context, ns claims.NamespaceInfo, query ListServiceAccountTokenQuery) (*ListServiceAccountTokenResult, error) {
-	// for continue
-	query.Pagination.Limit += 1
-	query.OrgID = ns.OrgID
-	if ns.OrgID == 0 {
-		return nil, fmt.Errorf("expected non zero orgID")
-	}
-
-	sql, err := s.sql(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	req := newListServiceAccountTokens(sql, &query)
-	q, err := sqltemplate.Execute(sqlQueryServiceAccountTokensTemplate, req)
-	if err != nil {
-		return nil, fmt.Errorf("execute template %q: %w", sqlQueryServiceAccountTokensTemplate.Name(), err)
-	}
-
-	rows, err := sql.DB.GetSqlxSession().Query(ctx, q, req.GetArgs()...)
-	defer func() {
-		if rows != nil {
-			_ = rows.Close()
-		}
-	}()
-
-	res := &ListServiceAccountTokenResult{}
-	if err != nil {
-		return nil, err
-	}
-
-	var lastID int64
-	for rows.Next() {
-		var t ServiceAccountToken
-		err := rows.Scan(&t.ID, &t.Name, &t.Revoked, &t.LastUsed, &t.Expires, &t.Created, &t.Updated)
-		if err != nil {
-			return res, err
-		}
-
-		lastID = t.ID
-		res.Items = append(res.Items, t)
-		if len(res.Items) > int(query.Pagination.Limit)-1 {
-			res.Items = res.Items[0 : len(res.Items)-1]
-			res.Continue = lastID
-			break
-		}
-	}
-
-	return res, err
-}
-
 var sqlCreateServiceAccountTemplate = mustTemplate("create_service_account.sql")
 
 func newCreateServiceAccount(sql *legacysql.LegacyDatabaseHelper, cmd *CreateServiceAccountCommand) createServiceAccountQuery {
@@ -332,18 +237,18 @@ func (s *legacySQLStore) CreateServiceAccount(ctx context.Context, ns claims.Nam
 	cmd.OrgID = ns.OrgID
 	cmd.Email = cmd.Login
 
-	now := time.Now().UTC().Truncate(time.Second)
+	now := time.Now().UTC()
 	lastSeenAt := now.AddDate(-10, 0, 0) // Set last seen 10 years ago like in user service
 
-	cmd.Created = NewDBTime(now)
-	cmd.Updated = NewDBTime(now)
+	cmd.Created = legacysql.NewDBTime(now)
+	cmd.Updated = legacysql.NewDBTime(now)
 	cmd.LastSeenAt = lastSeenAt
 
 	if ns.OrgID == 0 {
 		return nil, fmt.Errorf("expected non zero org id")
 	}
 
-	sql, err := s.sql(ctx)
+	sql, err := s.getDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -399,4 +304,86 @@ func (s *legacySQLStore) CreateServiceAccount(ctx context.Context, ns claims.Nam
 	}
 
 	return &CreateServiceAccountResult{ServiceAccount: createdSA}, nil
+}
+
+func (s *legacySQLStore) DeleteServiceAccount(ctx context.Context, ns claims.NamespaceInfo, cmd DeleteUserCommand) error {
+	sql, err := s.getDB(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := newDeleteUser(sql, &cmd)
+	if err := req.Validate(); err != nil {
+		return err
+	}
+
+	err = sql.DB.GetSqlxSession().WithTransaction(ctx, func(st *session.SessionTx) error {
+		userLookupReq := newGetServiceAccountInternalID(sql, &GetServiceAccountInternalIDQuery{
+			OrgID: ns.OrgID,
+			UID:   cmd.UID,
+		})
+
+		userQuery, err := sqltemplate.Execute(sqlQueryServiceAccountInternalIDTemplate, userLookupReq)
+		if err != nil {
+			return fmt.Errorf("execute user lookup template: %w", err)
+		}
+
+		rows, err := st.Query(ctx, userQuery, userLookupReq.GetArgs()...)
+		if err != nil {
+			return fmt.Errorf("failed to check if user exists: %w", err)
+		}
+		defer func() {
+			if rows != nil {
+				_ = rows.Close()
+			}
+		}()
+
+		var userID int64
+		if !rows.Next() {
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("failed to read user lookup rows: %w", err)
+			}
+			return fmt.Errorf("user not found")
+		}
+
+		if err := rows.Scan(&userID); err != nil {
+			return fmt.Errorf("failed to scan user ID: %w", err)
+		}
+
+		// Close rows to avoid the bad connection error
+		if rows != nil {
+			_ = rows.Close()
+		}
+
+		orgUserReq := newDeleteOrgUser(sql, userID)
+		if err := orgUserReq.Validate(); err != nil {
+			return err
+		}
+
+		orgUserDeleteQuery, err := sqltemplate.Execute(sqlDeleteOrgUserTemplate, orgUserReq)
+		if err != nil {
+			return fmt.Errorf("execute org_user delete template: %w", err)
+		}
+
+		if _, err := st.Exec(ctx, orgUserDeleteQuery, orgUserReq.GetArgs()...); err != nil {
+			return fmt.Errorf("failed to delete org_user relationship: %w", err)
+		}
+
+		deleteQuery, err := sqltemplate.Execute(sqlDeleteUserTemplate, req)
+		if err != nil {
+			return fmt.Errorf("execute service account template %q: %w", sqlDeleteUserTemplate.Name(), err)
+		}
+
+		if _, err := st.Exec(ctx, deleteQuery, req.GetArgs()...); err != nil {
+			return fmt.Errorf("failed to delete service account: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -2,8 +2,8 @@
 import { isNumber } from 'lodash';
 
 import { NullValueMode } from '../types/data';
-import { Field, FieldCalcs, FieldType } from '../types/dataFrame';
-import { Registry, RegistryItem } from '../utils/Registry';
+import { type Field, type FieldCalcs, FieldType } from '../types/dataFrame';
+import { Registry, type RegistryItem } from '../utils/Registry';
 
 export enum ReducerID {
   sum = 'sum',
@@ -527,7 +527,7 @@ export function doStandardCalcs(field: Field, ignoreNulls: boolean, nullAsZero: 
       }
 
       if (isNumberField) {
-        calcs.sum += currentValue;
+        calcs.sum += currentValue || 0;
         calcs.allIsNull = false;
         calcs.nonNullCount++;
 

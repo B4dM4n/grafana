@@ -1,17 +1,18 @@
-import { HttpResponse, http } from 'msw';
 import { render, screen } from 'test/test-utils';
 
-import { setBackendSrv } from '@grafana/runtime';
-import server, { setupMockServer } from '@grafana/test-utils/server';
+import { config, setBackendSrv } from '@grafana/runtime';
+import { setupMockServer } from '@grafana/test-utils/server';
 import { getFolderFixtures } from '@grafana/test-utils/unstable';
 import { backendSrv } from 'app/core/services/backend_srv';
 
-import { MoveModal, Props } from './MoveModal';
+import { MoveModal, type Props } from './MoveModal';
 
 const [_, { folderA }] = getFolderFixtures();
 
 setBackendSrv(backendSrv);
 setupMockServer();
+
+const originalToggles = { ...config.featureToggles };
 
 describe('browse-dashboards MoveModal', () => {
   const mockOnDismiss = jest.fn();
@@ -20,17 +21,6 @@ describe('browse-dashboards MoveModal', () => {
   window.HTMLElement.prototype.scrollIntoView = () => {};
 
   beforeEach(() => {
-    server.use(
-      http.get('/api/folders/:uid/counts', () => {
-        return HttpResponse.json({
-          folder: 1,
-          dashboard: 2,
-          librarypanel: 3,
-          alertrule: 4,
-        });
-      })
-    );
-
     props = {
       isOpen: true,
       onConfirm: mockOnConfirm,
@@ -68,15 +58,39 @@ describe('browse-dashboards MoveModal', () => {
     expect(await screen.findByRole('button', { name: 'Select folder' })).toBeInTheDocument();
   });
 
-  it('displays a warning about permissions if a folder is selected', async () => {
-    props.selectedItems.folder = {
-      myFolderUid: true,
-    };
-    render(<MoveModal {...props} />);
+  describe('when a folder is selected', () => {
+    describe.each([
+      // app platform
+      true,
+      // legacy
+      false,
+    ])('with foldersAppPlatformAPI set to %s', (toggle) => {
+      beforeEach(() => {
+        props.selectedItems.folder = {
+          [folderA.item.uid]: true,
+        };
+        config.featureToggles.foldersAppPlatformAPI = toggle;
+      });
+      afterEach(() => {
+        config.featureToggles = originalToggles;
+      });
 
-    expect(
-      await screen.findByRole('status', { name: 'Moving this item may change its permissions.' })
-    ).toBeInTheDocument();
+      it('displays a warning about permissions if a folder is selected', async () => {
+        render(<MoveModal {...props} />);
+
+        expect(
+          await screen.findByRole('status', { name: 'Moving this item may change its permissions.' })
+        ).toBeInTheDocument();
+      });
+
+      it('warns that the selected folder contains other resources', async () => {
+        render(<MoveModal {...props} />);
+
+        expect(
+          await screen.findByRole('alert', { name: /contains other resources that will be moved/i })
+        ).toBeInTheDocument();
+      });
+    });
   });
 
   it('enables the `Move` button once a folder is selected', async () => {

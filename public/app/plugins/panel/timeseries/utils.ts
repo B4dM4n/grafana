@@ -1,22 +1,54 @@
 import {
-  DataFrame,
-  Field,
+  type DataFrame,
+  type Field,
   FieldType,
+  formatLabels,
   getDisplayProcessor,
-  GrafanaTheme2,
+  type GrafanaTheme2,
   isBooleanUnit,
-  TimeRange,
+  type TimeRange,
   cacheFieldDisplayNames,
   applyNullInsertThreshold,
   nullToValue,
 } from '@grafana/data';
 import { convertFieldType } from '@grafana/data/internal';
-import { GraphFieldConfig, LineInterpolation, TooltipDisplayMode, VizTooltipOptions } from '@grafana/schema';
+import { type GraphFieldConfig, LineInterpolation } from '@grafana/schema';
 import { buildScaleKey } from '@grafana/ui/internal';
 
-import { HeatmapTooltip } from '../heatmap/panelcfg.gen';
-
 type ScaleKey = string;
+
+/**
+ * Stable identity for pairing a compare-series field with its current-period counterpart.
+ * Can't reuse getFieldDisplayName since compare series get a " (comparison)" suffix.
+ * Labels come first (precise per-series identity); config.displayName is not preferred over
+ * them because it's often a shared, un-interpolated template that collapses all series.
+ */
+export function getCompareSeriesIdentityKey(field: Field, frame?: DataFrame): string {
+  // The compare request runs under a distinct `<refId>-compare` refId (see PanelTimeRange.getExtraQueries)
+  // so query caches/panels don't collide. Datasources that embed the refId in the series name (e.g. TestData)
+  // then emit compare names like `A-compare-series1` while the current period is `A-series1`. Strip that
+  // infix so a compare series still pairs with its current-period counterpart. Label-based datasources
+  // (e.g. Prometheus) are unaffected since their names don't start with the refId.
+  const refId = frame?.refId ?? '';
+  const baseRefId = refId.replace(/-compare$/, '');
+  const name =
+    baseRefId !== refId && field.name.startsWith(refId) ? `${baseRefId}${field.name.slice(refId.length)}` : field.name;
+
+  const labels = field.labels ? formatLabels(field.labels) : '';
+  if (labels) {
+    return `${name} ${labels}`;
+  }
+  if (field.config?.displayName) {
+    return field.config.displayName;
+  }
+  if (field.config?.displayNameFromDS) {
+    return field.config.displayNameFromDS;
+  }
+  if (frame?.name) {
+    return `${frame.name} ${name}`;
+  }
+  return name;
+}
 
 // this will re-enumerate all enum fields on the same scale to create one ordinal progression
 // e.g. ['a','b'][0,1,0] + ['c','d'][1,0,1] -> ['a','b'][0,1,0] + ['c','d'][3,2,3]
@@ -36,7 +68,7 @@ function reEnumFields(frames: DataFrame[]): DataFrame[] {
             allTextsByKey.set(scaleKey, allTexts);
           }
 
-          let idxs: number[] = field.values.toArray().slice();
+          let idxs: number[] = field.values.slice();
           let txts = field.config.type!.enum!.text!;
 
           // by-reference incrementing
@@ -147,14 +179,27 @@ export function prepareGraphableFields(
           break;
         case FieldType.number:
           hasValueField = useNumericX ? fieldIdx > 0 : true;
+
+          // we need to make sure all values in the array are numbers or null
+          // so, check all values and if we encounter a bad one, copy the array and
+          // replace all further-occuring non-numbers with null to make safe values array
+          let values = field.values;
+          let safeValues: unknown[] | undefined = undefined;
+
+          for (let i = 0; i < values.length; i++) {
+            let v = values[i];
+
+            if (!(Number.isFinite(v) || v == null)) {
+              safeValues ??= values.slice();
+              safeValues[i] = null;
+            }
+          }
+
+          safeValues ??= values;
+
           copy = {
             ...field,
-            values: field.values.map((v) => {
-              if (!(Number.isFinite(v) || v == null)) {
-                return null;
-              }
-              return v;
-            }),
+            values: safeValues,
           };
 
           fields.push(copy);
@@ -176,12 +221,12 @@ export function prepareGraphableFields(
             ...field.config,
             max: 1,
             min: 0,
-            custom,
+            custom: { ...custom },
           };
 
           // smooth and linear do not make sense
-          if (custom.lineInterpolation !== LineInterpolation.StepBefore) {
-            custom.lineInterpolation = LineInterpolation.StepAfter;
+          if (config.custom.lineInterpolation !== LineInterpolation.StepBefore) {
+            config.custom.lineInterpolation = LineInterpolation.StepAfter;
           }
 
           copy = {
@@ -242,20 +287,62 @@ const matchEnumColorToSeriesColor = (frames: DataFrame[], theme: GrafanaTheme2) 
 
 export const setClassicPaletteIdxs = (frames: DataFrame[], theme: GrafanaTheme2, skipFieldIdx?: number) => {
   let seriesIndex = 0;
-  frames.forEach((frame) => {
+
+  const updateFieldDisplay = (field: Field, idx: number) => {
+    field.state = { ...field.state, seriesIndex: idx };
+    field.display = getDisplayProcessor({ field, theme });
+  };
+
+  const shouldProcessField = (field: Field, fieldIdx: number) => {
+    return (
+      fieldIdx !== skipFieldIdx &&
+      (field.type === FieldType.number || field.type === FieldType.boolean || field.type === FieldType.enum)
+    );
+  };
+
+  // Identity -> seriesIndex for current-period fields, keyed by refId so multi-query panels stay isolated.
+  const seriesIndexByIdentity = new Map<string, number>();
+
+  // Assign palette indices to current-period series first so compare frames can look them up by identity.
+  for (const frame of frames) {
+    if (frame.meta?.timeCompare?.isTimeShiftQuery) {
+      continue;
+    }
+
+    const refId = frame.refId ?? '';
     frame.fields.forEach((field, fieldIdx) => {
-      if (
-        fieldIdx !== skipFieldIdx &&
-        (field.type === FieldType.number || field.type === FieldType.boolean || field.type === FieldType.enum)
-      ) {
-        field.state = {
-          ...field.state,
-          seriesIndex: seriesIndex++, // TODO: skip this for fields with custom renderers (e.g. Candlestick)?
-        };
-        field.display = getDisplayProcessor({ field, theme });
+      if (!shouldProcessField(field, fieldIdx)) {
+        return;
+      }
+
+      const idx = seriesIndex++;
+      updateFieldDisplay(field, idx);
+
+      const identityKey = `${refId}\0${getCompareSeriesIdentityKey(field, frame)}`;
+      if (!seriesIndexByIdentity.has(identityKey)) {
+        seriesIndexByIdentity.set(identityKey, idx);
       }
     });
-  });
+  }
+
+  // Pair compare series to the matching current-period series by labels/name, not result-list position.
+  for (const frame of frames) {
+    if (!frame.meta?.timeCompare?.isTimeShiftQuery) {
+      continue;
+    }
+
+    const baseRefId = frame.refId?.replace(/-compare$/, '') ?? '';
+
+    frame.fields.forEach((field, fieldIdx) => {
+      if (!shouldProcessField(field, fieldIdx)) {
+        return;
+      }
+
+      const identityKey = `${baseRefId}\0${getCompareSeriesIdentityKey(field, frame)}`;
+      const matchedIndex = seriesIndexByIdentity.get(identityKey);
+      updateFieldDisplay(field, matchedIndex ?? seriesIndex++);
+    });
+  }
 };
 
 export function getTimezones(timezones: string[] | undefined, defaultTimezone: string): string[] {
@@ -264,7 +351,3 @@ export function getTimezones(timezones: string[] | undefined, defaultTimezone: s
   }
   return timezones.map((v) => (v?.length ? v : defaultTimezone));
 }
-
-export const isTooltipScrollable = (tooltipOptions: VizTooltipOptions | HeatmapTooltip) => {
-  return tooltipOptions.mode === TooltipDisplayMode.Multi && tooltipOptions.maxHeight != null;
-};

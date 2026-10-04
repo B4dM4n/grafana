@@ -33,9 +33,8 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "dashboard/db/my-dashboard",
-								"title":       "Dashboard Link",
-								"targetBlank": false,
+								"url":   "dashboard/db/my-dashboard",
+								"title": "Dashboard Link",
 							},
 						},
 					},
@@ -67,9 +66,8 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "dashboard/my-dashboard-uid",
-								"title":       "DashUri Link",
-								"targetBlank": false,
+								"url":   "dashboard/my-dashboard-uid",
+								"title": "DashUri Link",
 							},
 						},
 					},
@@ -102,9 +100,8 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "http://example.com?$__url_time_range",
-								"title":       "KeepTime Link",
-								"targetBlank": false,
+								"url":   "http://example.com?$__url_time_range",
+								"title": "KeepTime Link",
 							},
 						},
 					},
@@ -137,9 +134,8 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "http://example.com?$__all_variables",
-								"title":       "IncludeVars Link",
-								"targetBlank": false,
+								"url":   "http://example.com?$__all_variables",
+								"title": "IncludeVars Link",
 							},
 						},
 					},
@@ -172,9 +168,8 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "http://example.com?customParam=value",
-								"title":       "Custom Params Link",
-								"targetBlank": false,
+								"url":   "http://example.com?customParam=value",
+								"title": "Custom Params Link",
 							},
 						},
 					},
@@ -229,9 +224,8 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "http://example.com",
-								"title":       "Existing URL Link",
-								"targetBlank": false,
+								"url":   "http://example.com",
+								"title": "Existing URL Link",
 							},
 						},
 					},
@@ -245,9 +239,42 @@ func TestV19(t *testing.T) {
 						"id": 1,
 						"links": []interface{}{
 							map[string]interface{}{
-								"url":         "http://example.com",
-								"title":       "Existing URL Link",
-								"targetBlank": false,
+								"url":   "http://example.com",
+								"title": "Existing URL Link",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "panel link URL that already has a query string appends with & not ?",
+			input: map[string]interface{}{
+				"title":         "V19 Existing Query String Links Migration Test Dashboard",
+				"schemaVersion": 18,
+				"panels": []interface{}{
+					map[string]interface{}{
+						"id": 1,
+						"links": []interface{}{
+							map[string]interface{}{
+								"url":      "http://example.com/d/abc?orgId=1",
+								"keepTime": true,
+								"title":    "Existing Query Link",
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"title":         "V19 Existing Query String Links Migration Test Dashboard",
+				"schemaVersion": 19,
+				"panels": []interface{}{
+					map[string]interface{}{
+						"id": 1,
+						"links": []interface{}{
+							map[string]interface{}{
+								"url":   "http://example.com/d/abc?orgId=1&$__url_time_range",
+								"title": "Existing Query Link",
 							},
 						},
 					},
@@ -271,6 +298,52 @@ func TestV19(t *testing.T) {
 				"panels": []interface{}{
 					map[string]interface{}{
 						"id": 1,
+					},
+				},
+			},
+		},
+		{
+			name: "migrates panel links for panels nested in collapsed rows",
+			input: map[string]interface{}{
+				"title":         "V19 Nested Panel Links Migration Test Dashboard",
+				"schemaVersion": 18,
+				"panels": []interface{}{
+					map[string]interface{}{
+						"type":      "row",
+						"collapsed": true,
+						"panels": []interface{}{
+							map[string]interface{}{
+								"id": 1,
+								"links": []interface{}{
+									map[string]interface{}{
+										"url":      "http://example.com",
+										"keepTime": true,
+										"title":    "KeepTime Link",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"title":         "V19 Nested Panel Links Migration Test Dashboard",
+				"schemaVersion": 19,
+				"panels": []interface{}{
+					map[string]interface{}{
+						"type":      "row",
+						"collapsed": true,
+						"panels": []interface{}{
+							map[string]interface{}{
+								"id": 1,
+								"links": []interface{}{
+									map[string]interface{}{
+										"url":   "http://example.com?$__url_time_range",
+										"title": "KeepTime Link",
+									},
+								},
+							},
+						},
 					},
 				},
 			},

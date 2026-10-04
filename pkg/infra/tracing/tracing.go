@@ -29,11 +29,13 @@ import (
 
 	"github.com/go-kit/log/level"
 
+	"github.com/grafana/dskit/services"
 	"github.com/grafana/grafana/pkg/apimachinery/errutil"
 	"github.com/grafana/grafana/pkg/infra/log"
 )
 
 const (
+	ServiceName        = "tracing"
 	envJaegerAgentHost = "JAEGER_AGENT_HOST"
 	envJaegerAgentPort = "JAEGER_AGENT_PORT"
 )
@@ -41,6 +43,7 @@ const (
 const (
 	jaegerExporter string = "jaeger"
 	otlpExporter   string = "otlp"
+	fileExporter   string = "file"
 	noopExporter   string = "noop"
 
 	jaegerPropagator string = "jaeger"
@@ -48,6 +51,8 @@ const (
 )
 
 type TracingService struct {
+	services.NamedService
+
 	cfg *TracingConfig
 	log log.Logger
 
@@ -93,6 +98,7 @@ func ProvideService(tracingCfg *TracingConfig) (*TracingService, error) {
 		cfg: tracingCfg,
 		log: log.New("tracing"),
 	}
+	ots.NamedService = services.NewBasicService(ots.starting, ots.running, ots.stopping).WithName(ServiceName)
 
 	if err := ots.initOpentelemetryTracer(); err != nil {
 		return nil, err
@@ -189,6 +195,44 @@ func (ots *TracingService) initOTLPTracerProvider() (*tracesdk.TracerProvider, e
 	return initTracerProvider(exp, ots.cfg.ServiceName, ots.cfg.ServiceVersion, sampler, ots.cfg.CustomAttribs...)
 }
 
+func (ots *TracingService) initFileTracerProvider() (tracerProvider, error) {
+	client, err := newFileClient(ots.cfg, ots.log)
+	if err != nil {
+		return ots.disableFileExporter(err)
+	}
+
+	exp, err := otlptrace.New(context.Background(), client)
+	if err != nil {
+		// newFileClient already opened the capture file; close it so a failed
+		// setup doesn't leak the descriptor.
+		_ = client.Stop(context.Background())
+		return ots.disableFileExporter(err)
+	}
+
+	sampler, err := ots.initSampler()
+	if err != nil {
+		_ = exp.Shutdown(context.Background())
+		return ots.disableFileExporter(err)
+	}
+
+	tp, err := initTracerProvider(exp, ots.cfg.ServiceName, ots.cfg.ServiceVersion, sampler, ots.cfg.CustomAttribs...)
+	if err != nil {
+		_ = exp.Shutdown(context.Background())
+		return ots.disableFileExporter(err)
+	}
+	return tp, nil
+}
+
+// disableFileExporter degrades to a noop tracer when the file exporter can't be
+// set up. Trace file capture is an optional support workflow, so no setup
+// failure (bad path, invalid sampler, exporter error) may prevent Grafana from
+// starting.
+func (ots *TracingService) disableFileExporter(err error) (tracerProvider, error) {
+	ots.log.Error("Disabling trace file exporter", "path", ots.cfg.FilePath, "err", err)
+	ots.cfg.enabled = noopExporter
+	return ots.initNoopTracerProvider()
+}
+
 func (ots *TracingService) initSampler() (tracesdk.Sampler, error) {
 	switch ots.cfg.Sampler {
 	case "const", "":
@@ -204,7 +248,7 @@ func (ots *TracingService) initSampler() (tracesdk.Sampler, error) {
 	case "rateLimiting":
 		return newRateLimiter(ots.cfg.SamplerParam), nil
 	case "remote":
-		return jaegerremote.New("grafana",
+		return jaegerremote.New(ots.cfg.ServiceName,
 			jaegerremote.WithSamplingServerURL(ots.cfg.SamplerRemoteURL),
 			jaegerremote.WithInitialSampler(tracesdk.TraceIDRatioBased(ots.cfg.SamplerParam)),
 		), nil
@@ -252,6 +296,11 @@ func (ots *TracingService) initOpentelemetryTracer() error {
 		}
 	case otlpExporter:
 		tp, err = ots.initOTLPTracerProvider()
+		if err != nil {
+			return err
+		}
+	case fileExporter:
+		tp, err = ots.initFileTracerProvider()
 		if err != nil {
 			return err
 		}
@@ -306,27 +355,35 @@ func (ots *TracingService) initOpentelemetryTracer() error {
 	return nil
 }
 
-func (ots *TracingService) Run(ctx context.Context) error {
+func (ots *TracingService) starting(ctx context.Context) error {
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 		err = level.Error(ots.log).Log("msg", "OpenTelemetry handler returned an error", "err", err)
 		if err != nil {
 			ots.log.Error("OpenTelemetry log returning error", err)
 		}
 	}))
+	return nil
+}
+func (ots *TracingService) running(ctx context.Context) error {
 	<-ctx.Done()
+	return nil
+}
 
+func (ots *TracingService) stopping(_ error) error {
 	ots.log.Info("Closing tracing")
 	if ots.tracerProvider == nil {
 		return nil
 	}
-	ctxShutdown, cancel := context.WithTimeout(ctx, time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
+	return ots.tracerProvider.Shutdown(ctx)
+}
 
-	if err := ots.tracerProvider.Shutdown(ctxShutdown); err != nil {
+func (ots *TracingService) Run(ctx context.Context) error {
+	if err := ots.StartAsync(ctx); err != nil {
 		return err
 	}
-
-	return nil
+	return ots.AwaitTerminated(ctx)
 }
 
 func (ots *TracingService) Inject(ctx context.Context, header http.Header, _ trace.Span) {

@@ -1,35 +1,36 @@
 import { css, cx } from '@emotion/css';
-import { autoUpdate, flip, shift, useFloating } from '@floating-ui/react';
+import { autoUpdate, useFloating } from '@floating-ui/react';
 import { useDialog } from '@react-aria/dialog';
 import { FocusScope } from '@react-aria/focus';
 import { useOverlay } from '@react-aria/overlays';
-import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import * as React from 'react';
 import Calendar from 'react-calendar';
 import { useMedia } from 'react-use';
 
 import {
   dateTimeFormat,
-  DateTime,
+  type DateTime,
   dateTime,
-  GrafanaTheme2,
+  type GrafanaTheme2,
   isDateTime,
   dateTimeForTimeZone,
   getTimeZone,
-  TimeZone,
+  type TimeZone,
 } from '@grafana/data';
 import { Components } from '@grafana/e2e-selectors';
 import { t, Trans } from '@grafana/i18n';
 
 import { useStyles2, useTheme2 } from '../../../themes/ThemeContext';
+import { getPositioningMiddleware } from '../../../utils/floating';
 import { Button } from '../../Button/Button';
 import { InlineField } from '../../Forms/InlineField';
 import { Icon } from '../../Icon/Icon';
 import { Input } from '../../Input/Input';
 import { Stack } from '../../Layout/Stack/Stack';
 import { getModalStyles } from '../../Modal/getModalStyles';
-import { Portal } from '../../Portal/Portal';
-import { TimeOfDayPicker, POPUP_CLASS_NAME } from '../TimeOfDayPicker';
+import { getPortalContainer, Portal } from '../../Portal/Portal';
+import { TimeOfDayPicker } from '../TimeOfDayPicker';
 import { getBodyStyles } from '../TimeRangePicker/CalendarBody';
 import { isValid } from '../utils';
 import { adjustDateForReactCalendar } from '../utils/adjustDateForReactCalendar';
@@ -59,6 +60,11 @@ export interface Props {
   timeZone?: TimeZone;
 }
 
+/**
+ * A component for selecting a date *and* time.
+ *
+ * https://developers.grafana.com/ui/latest/index.html?path=/docs/date-time-pickers-datetimepicker--docs
+ */
 export const DateTimePicker = ({
   date,
   maxDate,
@@ -80,10 +86,7 @@ export const DateTimePicker = ({
       onClose: () => setOpen(false),
       isDismissable: true,
       isOpen,
-      shouldCloseOnInteractOutside: (element) => {
-        const popupElement = document.getElementsByClassName(POPUP_CLASS_NAME)[0];
-        return !(popupElement && popupElement.contains(element));
-      },
+      shouldCloseOnInteractOutside: (element) => !getPortalContainer().contains(element),
     },
     ref
   );
@@ -92,22 +95,16 @@ export const DateTimePicker = ({
   const theme = useTheme2();
   const { modalBackdrop } = useStyles2(getModalStyles);
   const isFullscreen = useMedia(`(min-width: ${theme.breakpoints.values.lg}px)`);
+  const placement = 'bottom-start';
   const styles = useStyles2(getStyles);
 
   // the order of middleware is important!
   // see https://floating-ui.com/docs/arrow#order
-  const middleware = [
-    flip({
-      // see https://floating-ui.com/docs/flip#combining-with-shift
-      crossAxis: false,
-      boundary: document.body,
-    }),
-    shift(),
-  ];
+  const middleware = getPositioningMiddleware(placement);
 
   const { refs, floatingStyles } = useFloating({
     open: isOpen,
-    placement: 'bottom-start',
+    placement,
     onOpenChange: setOpen,
     middleware,
     whileElementsMounted: autoUpdate,
@@ -366,8 +363,6 @@ const DateTimeCalendar = React.forwardRef<HTMLDivElement, DateTimeCalendarProps>
             onChange={onChangeTime}
             value={timeOfDayDateTime}
             disabledHours={disabledHours}
-            disabledMinutes={disabledMinutes}
-            disabledSeconds={disabledSeconds}
           />
         </div>
         <Stack>

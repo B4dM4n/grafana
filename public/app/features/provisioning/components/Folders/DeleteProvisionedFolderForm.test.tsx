@@ -1,24 +1,23 @@
+import { OpenFeatureProvider } from '@openfeature/react-sdk';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { RepositoryView, useDeleteRepositoryFilesWithPathMutation } from 'app/api/clients/provisioning/v0alpha1';
-import { FolderDTO } from 'app/types/folders';
+import { getTestFeatureFlagClient } from '@grafana/test-utils/unstable';
+import {
+  type RepositoryView,
+  useCreateRepositoryJobsMutation,
+  useDeleteRepositoryFilesWithPathMutation,
+} from 'app/api/clients/provisioning/v0alpha1';
+import { type FolderDTO } from 'app/types/folders';
 
 import {
-  ProvisionedFolderFormDataResult,
+  type ProvisionedFolderFormDataResult,
   useProvisionedFolderFormData,
 } from '../../hooks/useProvisionedFolderFormData';
 
 import { DeleteProvisionedFolderForm } from './DeleteProvisionedFolderForm';
 
 // Mock dependencies
-jest.mock('@grafana/runtime', () => ({
-  ...jest.requireActual('@grafana/runtime'),
-  getAppEvents: jest.fn(() => ({
-    publish: jest.fn(),
-  })),
-}));
-
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom-v5-compat', () => ({
   useNavigate: () => mockNavigate,
@@ -34,6 +33,7 @@ jest.mock('react-redux', () => {
 
 jest.mock('app/api/clients/provisioning/v0alpha1', () => ({
   useDeleteRepositoryFilesWithPathMutation: jest.fn(),
+  useCreateRepositoryJobsMutation: jest.fn(),
   provisioningAPI: {
     endpoints: {
       listRepository: {
@@ -52,8 +52,10 @@ jest.mock('app/api/clients/provisioning/v0alpha1', () => ({
 
 jest.mock('../../hooks/useProvisionedFolderFormData');
 
-jest.mock('app/features/browse-dashboards/components/BrowseActions/DescendantCount', () => ({
-  DescendantCount: () => <div data-testid="descendant-count">2 folders, 5 dashboards</div>,
+jest.mock('app/features/browse-dashboards/components/BrowseActions/AffectedFolderContents', () => ({
+  AffectedFolderContents: jest.fn(({ defaultMessage }) => (
+    <div data-testid="affected-folder-contents">{defaultMessage}</div>
+  )),
 }));
 
 jest.mock('../Shared/ResourceEditFormSharedFields', () => ({
@@ -83,11 +85,15 @@ const MOCK_DATA = {
 const mockUseDeleteRepositoryFilesMutation = useDeleteRepositoryFilesWithPathMutation as jest.MockedFunction<
   typeof useDeleteRepositoryFilesWithPathMutation
 >;
+const mockUseCreateRepositoryJobsMutation = useCreateRepositoryJobsMutation as jest.MockedFunction<
+  typeof useCreateRepositoryJobsMutation
+>;
 const mockUseProvisionedFolderFormData = useProvisionedFolderFormData as jest.MockedFunction<
   typeof useProvisionedFolderFormData
 >;
 
 const mockDeleteRepoFile = jest.fn();
+const mockCreateJob = jest.fn();
 
 const mockParentFolder: FolderDTO = {
   id: 1,
@@ -138,14 +144,13 @@ const mockFormData = {
 };
 
 const defaultHookData: ProvisionedFolderFormDataResult = {
-  workflowOptions: [
-    { label: 'Write directly', value: 'write' },
-    { label: 'Create branch', value: 'branch' },
-  ],
   repository: mockRepository,
   folder: mockFolder,
   initialValues: mockFormData,
   isReadOnlyRepo: false,
+  isMissingRepo: false,
+  canPushToConfiguredBranch: true,
+  isLoading: false,
 };
 
 function setup(
@@ -161,9 +166,15 @@ function setup(
   const mockMutationResult = [mockDeleteRepoFile, requestState] as unknown as ReturnType<
     typeof useDeleteRepositoryFilesWithPathMutation
   >;
+  const mockJobMutationResult = [mockCreateJob, requestState] as unknown as ReturnType<
+    typeof useCreateRepositoryJobsMutation
+  >;
   const mockHookResult = hookData as ReturnType<typeof useProvisionedFolderFormData>;
 
+  // The submit path awaits deleteRepoFile(...).unwrap() and passes the result to the real request handler
+  mockDeleteRepoFile.mockReturnValue({ unwrap: () => Promise.resolve(MOCK_DATA) });
   mockUseDeleteRepositoryFilesMutation.mockReturnValue(mockMutationResult);
+  mockUseCreateRepositoryJobsMutation.mockReturnValue(mockJobMutationResult);
   mockUseProvisionedFolderFormData.mockReturnValue(mockHookResult);
 
   const onDismiss = jest.fn();
@@ -172,7 +183,11 @@ function setup(
     onDismiss,
   };
 
-  const renderResult = render(<DeleteProvisionedFolderForm {...defaultProps} {...props} />);
+  const renderResult = render(
+    <OpenFeatureProvider client={getTestFeatureFlagClient()}>
+      <DeleteProvisionedFolderForm {...defaultProps} {...props} />
+    </OpenFeatureProvider>
+  );
 
   const clickDeleteButton = async () => {
     const deleteButton = screen.getByRole('button', { name: /delete/i });
@@ -183,6 +198,7 @@ function setup(
     ...renderResult,
     onDismiss,
     mockDeleteRepoFile,
+    mockCreateJob,
     mockNavigate,
     clickDeleteButton,
   };
@@ -205,38 +221,73 @@ describe('DeleteProvisionedFolderForm', () => {
       setup();
       // delete warning and descendant count
       expect(screen.getByText(/This will delete this folder and all its descendants/)).toBeInTheDocument();
-      expect(screen.getByTestId('descendant-count')).toBeInTheDocument();
+      expect(screen.getByTestId('affected-folder-contents')).toBeInTheDocument();
 
       // delete and cancel buttons
       expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
     });
 
-    it('should not render if initialValues is null', () => {
-      setup({}, { ...defaultHookData, initialValues: undefined });
+    it('should not render the form when the repository is missing', () => {
+      setup({}, { ...defaultHookData, repository: undefined, initialValues: undefined, isMissingRepo: true });
       expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
     });
   });
 
   describe('form submission', () => {
-    it('should call deleteRepoFile with correct parameters on form submission', async () => {
-      const { mockDeleteRepoFile, clickDeleteButton } = setup();
+    it('should call createJob with correct parameters on form submission for write workflow', async () => {
+      const { mockCreateJob, clickDeleteButton } = setup();
 
       await clickDeleteButton();
 
       await waitFor(() => {
-        expect(mockDeleteRepoFile).toHaveBeenCalledWith({
+        expect(mockCreateJob).toHaveBeenCalledWith({
           name: 'test-repo',
-          path: 'folders/test-folder.json/',
-          ref: undefined, // write workflow doesn't set ref
-          message: 'Delete folder: folders/test-folder.json',
+          jobSpec: {
+            action: 'delete',
+            message: 'Delete folder: Test Folder',
+            delete: {
+              ref: undefined, // write workflow doesn't set ref
+              resources: [
+                {
+                  name: 'folder-uid',
+                  group: 'folder.grafana.app',
+                  kind: 'Folder',
+                },
+              ],
+            },
+          },
         });
       });
     });
 
-    it('should use custom commit message if provided', async () => {
+    it('commits the rendered commit template on the write workflow', async () => {
+      const { mockCreateJob, clickDeleteButton } = setup(
+        {},
+        {
+          ...defaultHookData,
+          repository: {
+            ...mockRepository,
+            commit: { singleResourceMessageTemplate: 'chore({{resourceKind}}s): {{action}} {{title}}' },
+          },
+        }
+      );
+
+      await clickDeleteButton();
+
+      await waitFor(() => {
+        expect(mockCreateJob).toHaveBeenCalledWith(
+          expect.objectContaining({
+            jobSpec: expect.objectContaining({ message: 'chore(folders): delete Test Folder' }),
+          })
+        );
+      });
+    });
+
+    it('should call deleteRepoFile with custom commit message for branch workflow', async () => {
       const customFormData = {
         ...mockFormData,
+        workflow: 'branch' as const,
         comment: 'Custom delete message',
       };
       const { mockDeleteRepoFile, clickDeleteButton } = setup(
@@ -247,10 +298,33 @@ describe('DeleteProvisionedFolderForm', () => {
       await clickDeleteButton();
 
       await waitFor(() => {
+        expect(mockDeleteRepoFile).toHaveBeenCalledWith({
+          name: 'test-repo',
+          path: 'folders/test-folder.json',
+          ref: 'main', // branch workflow sets ref
+          message: 'Custom delete message',
+        });
+      });
+    });
+
+    it('renders the message from the repo commit template when comment is empty', async () => {
+      const { mockDeleteRepoFile, clickDeleteButton } = setup(
+        {},
+        {
+          ...defaultHookData,
+          repository: {
+            ...defaultHookData.repository!,
+            commit: { singleResourceMessageTemplate: 'chore({{resourceKind}}s): {{action}} {{title}}' },
+          },
+          initialValues: { ...mockFormData, workflow: 'branch' as const, comment: '' },
+        }
+      );
+
+      await clickDeleteButton();
+
+      await waitFor(() => {
         expect(mockDeleteRepoFile).toHaveBeenCalledWith(
-          expect.objectContaining({
-            message: 'Custom delete message',
-          })
+          expect.objectContaining({ message: 'chore(folders): delete Test Folder' })
         );
       });
     });
@@ -298,72 +372,51 @@ describe('DeleteProvisionedFolderForm', () => {
   });
 
   describe('success handling', () => {
-    it('should navigate to parent folder on successful write workflow', async () => {
-      const successState = {
-        isLoading: false,
-        isSuccess: true,
-        isError: false,
-        error: null,
-        data: MOCK_DATA,
-      };
-      setup({}, defaultHookData, successState);
-
-      await waitFor(() => {
-        expect(window.location.href).toBe('/dashboards/f/parent-folder-uid/');
-      });
-    });
-
-    it('should navigate to dashboards root when parent folder has no parentUid', async () => {
-      const folderWithoutParent = { ...mockParentFolder, parentUid: undefined };
-      const successState = {
-        isLoading: false,
-        isSuccess: true,
-        isError: false,
-        error: null,
-        data: MOCK_DATA,
-      };
-      setup({ parentFolder: folderWithoutParent }, defaultHookData, successState);
-
-      await waitFor(() => {
-        expect(window.location.href).toBe('/dashboards');
-      });
-    });
-
     it('should handle branch workflow success with navigation', async () => {
-      const branchFormData = { ...mockFormData, workflow: 'branch' } as unknown as typeof mockFormData;
-      const successState = {
-        isLoading: false,
-        isSuccess: true,
-        isError: false,
-        error: null,
-        data: {
-          ...MOCK_DATA,
-          ref: 'feature-branch',
-          path: 'folders/test-folder.json',
-          urls: { newPullRequestURL: 'https://github.com/test/repo/pull/new' },
-        },
-      };
-      const { mockNavigate } = setup({}, { ...defaultHookData, initialValues: branchFormData }, successState);
+      const branchFormData = { ...mockFormData, workflow: 'branch' as const, ref: 'feature-branch' };
+      const { mockNavigate, onDismiss, clickDeleteButton } = setup(
+        {},
+        { ...defaultHookData, initialValues: branchFormData }
+      );
+      mockDeleteRepoFile.mockReturnValue({
+        unwrap: () =>
+          Promise.resolve({
+            ...MOCK_DATA,
+            ref: 'feature-branch',
+            path: 'folders/test-folder.json',
+            urls: { newPullRequestURL: 'https://github.com/test/repo/pull/new' },
+          }),
+      });
+
+      await clickDeleteButton();
 
       await waitFor(() => {
         const expectedParams = new URLSearchParams();
         expectedParams.set('new_pull_request_url', 'https://github.com/test/repo/pull/new');
         expectedParams.set('repo_type', 'git');
+        expectedParams.set('action', 'delete');
         const expectedUrl = `/dashboards?${expectedParams.toString()}`;
 
         expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
       });
+      expect(onDismiss).toHaveBeenCalled();
     });
   });
 
   describe('error handling', () => {
-    it('should handle request failure', async () => {
-      const error = new Error('API Error');
-      const errorState = { isLoading: false, isSuccess: false, isError: true, error };
-      setup({}, defaultHookData, errorState);
+    it('should show the API error in an alert when the request fails', async () => {
+      const branchFormData = { ...mockFormData, workflow: 'branch' as const };
+      const { onDismiss, clickDeleteButton } = setup({}, { ...defaultHookData, initialValues: branchFormData });
+      mockDeleteRepoFile.mockReturnValue({
+        unwrap: () => Promise.reject({ status: 500, data: { message: 'API Error' } }),
+      });
 
-      // Component should handle error gracefully without crashing
+      await clickDeleteButton();
+
+      // The form catches the error and surfaces it in an alert; it stays open
+      expect(await screen.findByText('API Error')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
+      expect(onDismiss).not.toHaveBeenCalled();
     });
   });
 });

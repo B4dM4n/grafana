@@ -1,20 +1,20 @@
 import { css, cx } from '@emotion/css';
-import { AnchorHTMLAttributes, ButtonHTMLAttributes } from 'react';
+import { type AnchorHTMLAttributes, type ButtonHTMLAttributes } from 'react';
 import * as React from 'react';
 
-import { GrafanaTheme2, ThemeRichColor } from '@grafana/data';
+import { type GrafanaTheme2, textUtil, type ThemeRichColor } from '@grafana/data';
 
 import { useTheme2 } from '../../themes/ThemeContext';
-import { getFocusStyles, getMouseFocusStyles } from '../../themes/mixins';
-import { IconName, IconSize, IconType } from '../../types/icon';
-import { ComponentSize } from '../../types/size';
+import { getButtonFocusStyles, getMouseFocusStyles } from '../../themes/mixins';
+import { type IconName, type IconSize, type IconType } from '../../types/icon';
+import { type ComponentSize } from '../../types/size';
 import { getPropertiesForButtonSize } from '../Forms/commonStyles';
 import { Icon } from '../Icon/Icon';
 import { Tooltip } from '../Tooltip/Tooltip';
-import { PopoverContent, TooltipPlacement } from '../Tooltip/types';
+import { type PopoverContent, type TooltipPlacement } from '../Tooltip/types';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'success';
-export const allButtonVariants: ButtonVariant[] = ['primary', 'secondary', 'destructive'];
+export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'destructive' | 'success';
+export const allButtonVariants: ButtonVariant[] = ['primary', 'secondary', 'accent', 'destructive', 'success'];
 export type ButtonFill = 'solid' | 'outline' | 'text';
 export const allButtonFills: ButtonFill[] = ['solid', 'outline', 'text'];
 
@@ -22,7 +22,7 @@ type BaseProps = {
   size?: ComponentSize;
   variant?: ButtonVariant;
   fill?: ButtonFill;
-  icon?: IconName | React.ReactElement;
+  icon?: IconName | React.ReactElement<IconElementProps>;
   className?: string;
   fullWidth?: boolean;
   type?: string;
@@ -51,13 +51,16 @@ type CommonProps = BasePropsWithChildren | NoChildrenTooltip | NoChildrenAriaLab
 
 export type ButtonProps = CommonProps & ButtonHTMLAttributes<HTMLButtonElement>;
 
+/**
+ * https://developers.grafana.com/ui/latest/index.html?path=/docs/inputs-button--docs
+ */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
       'aria-label': ariaLabel,
-      variant = 'primary',
       size = 'md',
       fill = 'solid',
+      variant = fill === 'text' ? 'accent' : 'primary',
       icon,
       fullWidth,
       children,
@@ -139,6 +142,7 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, ButtonLinkProps>(
       size = 'md',
       fill = 'solid',
       icon,
+      iconPlacement = 'left',
       fullWidth,
       children,
       className,
@@ -147,10 +151,13 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, ButtonLinkProps>(
       disabled,
       tooltip,
       tooltipPlacement,
+      href,
       ...otherProps
     },
     ref
   ) => {
+    const sanitizedHref = href ? textUtil.sanitizeUrl(href) : href;
+
     const theme = useTheme2();
     const styles = getButtonStyles({
       theme,
@@ -171,18 +178,22 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, ButtonLinkProps>(
       className
     );
 
+    const iconComponent = icon && <IconRenderer icon={icon} size={size} className={styles.icon} />;
+
     // When using tooltip, ref is forwarded to Tooltip component instead for https://github.com/grafana/grafana/issues/65632
     const button = (
       <a
         className={linkButtonStyles}
         {...otherProps}
+        href={sanitizedHref}
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
         ref={tooltip ? undefined : ref}
         aria-label={ariaLabel ?? (!children && typeof tooltip === 'string' ? tooltip : undefined)}
       >
-        <IconRenderer icon={icon} size={size} className={styles.icon} />
+        {iconPlacement === 'left' && iconComponent}
         {children && <span className={styles.content}>{children}</span>}
+        {iconPlacement === 'right' && iconComponent}
       </a>
     );
 
@@ -200,8 +211,13 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, ButtonLinkProps>(
 
 LinkButton.displayName = 'LinkButton';
 
+type IconElementProps = {
+  className?: string;
+  size?: IconSize;
+};
+
 interface IconRendererProps {
-  icon?: IconName | React.ReactElement<{ className?: string; size?: IconSize }>;
+  icon?: IconName | React.ReactElement<IconElementProps>;
   size?: IconSize;
   className?: string;
   iconType?: IconType;
@@ -234,7 +250,7 @@ export const getButtonStyles = (props: StyleProps) => {
   const { height, padding, fontSize } = getPropertiesForButtonSize(size, theme);
   const variantStyles = getPropertiesForVariant(theme, variant, fill);
   const disabledStyles = getPropertiesForDisabled(theme, variant, fill);
-  const focusStyle = getFocusStyles(theme);
+  const focusStyle = getButtonFocusStyles(theme);
   const paddingMinusBorder = theme.spacing.gridSize * padding - 1;
 
   return {
@@ -263,9 +279,17 @@ export const getButtonStyles = (props: StyleProps) => {
       ...variantStyles,
       ':disabled': disabledStyles,
       '&[disabled]': disabledStyles,
+
+      [theme.transitions.handleMotion('no-preference', 'reduce')]: {
+        transition: theme.transitions.create(['background-color', 'border-color', 'color'], {
+          duration: theme.transitions.duration.short,
+        }),
+      },
     }),
     disabled: css(disabledStyles, {
       '&:hover': css(disabledStyles),
+      '&:focus': css(disabledStyles),
+      '&:focus-visible': css(disabledStyles),
     }),
     img: css({
       width: '16px',
@@ -290,32 +314,51 @@ export const getButtonStyles = (props: StyleProps) => {
   };
 };
 
+export function getActiveButtonStyles(color: ThemeRichColor, fill: ButtonFill, visualRefreshEnabled?: boolean) {
+  let backgroundColor = 'transparent';
+  if (fill === 'solid') {
+    backgroundColor = color.main;
+
+    if (visualRefreshEnabled) {
+      backgroundColor = color.name === 'primary' ? color.mainEmphasis : color.backgroundEmphasis;
+    }
+  }
+  return {
+    background: backgroundColor,
+  };
+}
+
 function getButtonVariantStyles(theme: GrafanaTheme2, color: ThemeRichColor, fill: ButtonFill) {
+  const visualRefreshEnabled = theme.flags.visualDesignRefresh;
   let outlineBorderColor = color.border;
-  let borderColor = 'transparent';
+  let borderColor = visualRefreshEnabled ? color.border : 'transparent';
   let hoverBorderColor = 'transparent';
 
-  // Secondary button has some special rules as we lack theem color token to
+  // Secondary button has some special rules as we lack the color token to
   // specify border color for normal button vs border color for outline button
   if (color.name === 'secondary') {
     borderColor = color.border;
-    hoverBorderColor = theme.colors.emphasize(color.border, 0.25);
+    hoverBorderColor = color.borderEmphasis;
     outlineBorderColor = theme.colors.border.strong;
   }
 
   if (fill === 'outline') {
+    if (visualRefreshEnabled) {
+      outlineBorderColor = color.text;
+    }
     return {
       background: 'transparent',
       color: color.text,
       border: `1px solid ${outlineBorderColor}`,
-      transition: theme.transitions.create(['background-color', 'border-color', 'color'], {
-        duration: theme.transitions.duration.short,
-      }),
 
-      '&:hover': {
-        background: color.transparent,
-        borderColor: theme.colors.emphasize(outlineBorderColor, 0.25),
-        color: color.text,
+      '&:hover, &:focus': {
+        background: visualRefreshEnabled ? color.background : color.transparent,
+        borderColor: visualRefreshEnabled ? color.textEmphasis : theme.colors.emphasize(outlineBorderColor, 0.25),
+        color: visualRefreshEnabled ? color.textEmphasis : color.text,
+      },
+
+      '&:active': {
+        ...getActiveButtonStyles(color, fill, visualRefreshEnabled),
       },
     };
   }
@@ -325,35 +368,60 @@ function getButtonVariantStyles(theme: GrafanaTheme2, color: ThemeRichColor, fil
       background: 'transparent',
       color: color.text,
       border: '1px solid transparent',
-      transition: theme.transitions.create(['background-color', 'color'], {
-        duration: theme.transitions.duration.short,
-      }),
 
-      '&:focus': {
-        outline: 'none',
+      '&:hover, &:focus': {
+        background: visualRefreshEnabled ? color.background : color.transparent,
+        color: visualRefreshEnabled ? color.textEmphasis : color.text,
         textDecoration: 'none',
+        outline: 'none',
       },
 
-      '&:hover': {
-        background: color.transparent,
-        textDecoration: 'none',
+      '&:active': {
+        ...getActiveButtonStyles(color, fill, visualRefreshEnabled),
       },
     };
   }
 
+  let backgroundColor = color.main;
+  let hoverBackgroundColor = color.shade;
+  let textColor = color.contrastText;
+  let hoverTextColor = color.contrastText;
+
+  if (visualRefreshEnabled) {
+    textColor = color.text;
+    hoverTextColor = color.textEmphasis;
+    backgroundColor = color.background;
+    hoverBackgroundColor = color.backgroundEmphasis;
+
+    if (color.name === 'primary' && fill === 'solid') {
+      backgroundColor = color.main;
+      hoverBackgroundColor = color.mainEmphasis;
+      borderColor = 'transparent';
+      hoverBorderColor = 'transparent';
+      textColor = color.contrastText;
+      hoverTextColor = color.contrastText;
+    }
+  }
+
   return {
-    background: color.main,
-    color: color.contrastText,
+    background: backgroundColor,
+    color: textColor,
     border: `1px solid ${borderColor}`,
-    transition: theme.transitions.create(['background-color', 'box-shadow', 'border-color', 'color'], {
-      duration: theme.transitions.duration.short,
-    }),
 
     '&:hover': {
-      background: color.shade,
-      color: color.contrastText,
+      background: hoverBackgroundColor,
+      color: hoverTextColor,
       boxShadow: theme.shadows.z1,
       borderColor: hoverBorderColor,
+    },
+
+    '&:focus': {
+      background: hoverBackgroundColor,
+      color: hoverTextColor,
+    },
+
+    '&:active': {
+      ...getActiveButtonStyles(color, fill, visualRefreshEnabled),
     },
   };
 }
@@ -364,6 +432,7 @@ function getPropertiesForDisabled(theme: GrafanaTheme2, variant: ButtonVariant, 
     boxShadow: 'none',
     color: theme.colors.text.disabled,
     transition: 'none',
+    background: theme.colors.action.disabledBackground,
   };
 
   if (fill === 'text') {
@@ -401,6 +470,9 @@ export function getPropertiesForVariant(theme: GrafanaTheme2, variant: ButtonVar
     case 'success':
       return getButtonVariantStyles(theme, theme.colors.success, fill);
 
+    case 'accent':
+      return getButtonVariantStyles(theme, theme.colors.accent, fill);
+
     case 'primary':
     default:
       return getButtonVariantStyles(theme, theme.colors.primary, fill);
@@ -413,21 +485,5 @@ export const clearButtonStyles = (theme: GrafanaTheme2) => {
     color: theme.colors.text.primary,
     border: 'none',
     padding: 0,
-  });
-};
-
-export const clearLinkButtonStyles = (theme: GrafanaTheme2) => {
-  return css({
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    fontFamily: 'inherit',
-    color: 'inherit',
-    height: '100%',
-    cursor: 'context-menu',
-    '&:hover': {
-      background: 'transparent',
-      color: 'inherit',
-    },
   });
 };

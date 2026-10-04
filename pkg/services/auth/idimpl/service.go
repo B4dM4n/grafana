@@ -4,9 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/cespare/xxhash/v2"
+	jose "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
@@ -68,7 +72,7 @@ func (s *Service) SignIdentity(ctx context.Context, id identity.Requester) (stri
 		s.metrics.tokenSigningDurationHistogram.Observe(time.Since(t).Seconds())
 	}(time.Now())
 
-	cacheKey := getCacheKey(id)
+	cacheKey := s.getCacheKey(id)
 
 	type resultType struct {
 		token    string
@@ -112,6 +116,7 @@ func (s *Service) SignIdentity(ctx context.Context, id identity.Requester) (stri
 			idClaims.Rest.AuthenticatedBy = id.GetAuthenticatedBy()
 			idClaims.Rest.Username = id.GetLogin()
 			idClaims.Rest.DisplayName = id.GetName()
+			idClaims.Rest.Groups = s.resolveGroupsClaim(id)
 		}
 
 		if id.GetOrgRole().IsValid() {
@@ -148,7 +153,17 @@ func (s *Service) RemoveIDToken(ctx context.Context, id identity.Requester) erro
 	ctx, span := s.tracer.Start(ctx, "user.sync.RemoveIDToken")
 	defer span.End()
 
-	return s.cache.Delete(ctx, getCacheKey(id))
+	return s.cache.Delete(ctx, s.getCacheKey(id))
+}
+
+// resolveGroupsClaim returns the groups to embed in the ID token's claims.
+func (s *Service) resolveGroupsClaim(id identity.Requester) []string {
+	if s.cfg.IDUseExternalGroupsForGroupsClaim {
+		// Use IdP/proxy-supplied groups; external group names are expected to match team UIDs (metadata.name).
+		return id.GetExternalGroups()
+	}
+	// Fall back to Grafana-stored team memberships.
+	return id.GetGroups()
 }
 
 func (s *Service) SyncIDToken(ctx context.Context, identity *authn.Identity, _ *authn.Request) error {
@@ -170,7 +185,7 @@ func (s *Service) SyncIDToken(ctx context.Context, identity *authn.Identity, _ *
 }
 
 func (s *Service) extractTokenClaims(token string) (*authnlib.Claims[authnlib.IDTokenClaims], error) {
-	parsed, err := jwt.ParseSigned(token)
+	parsed, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.ES256})
 	if err != nil {
 		s.metrics.failedTokenSigningCounter.Inc()
 		return nil, err
@@ -191,10 +206,23 @@ func getAudience(orgID int64) jwt.Audience {
 	return jwt.Audience{fmt.Sprintf("org:%d", orgID)}
 }
 
-func getCacheKey(ident identity.Requester) string {
-	return cachePrefix + ident.GetCacheKey() + string(ident.GetOrgRole())
+func (s *Service) getCacheKey(ident identity.Requester) string {
+	return cachePrefix + ident.GetCacheKey() + string(ident.GetOrgRole()) + hashGroups(s.resolveGroupsClaim(ident))
 }
 
 func shouldLogErr(err error) bool {
 	return !errors.Is(err, context.Canceled)
+}
+
+func hashGroups(groups []string) string {
+	sorted := make([]string, len(groups))
+	copy(sorted, groups)
+	sort.Strings(sorted)
+
+	h := xxhash.New()
+	for _, g := range sorted {
+		_, _ = h.WriteString(g)
+		_, _ = h.Write([]byte{0})
+	}
+	return strconv.FormatUint(h.Sum64(), 16)
 }

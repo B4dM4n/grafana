@@ -1,6 +1,6 @@
-import { LinkModel } from '@grafana/data';
+import { type LinkModel } from '@grafana/data';
 
-import { FieldDef } from '../logParser';
+import { type FieldDef } from '../logParser';
 
 export function getTempoTraceFromLinks(fields: FieldDef[]) {
   for (const field of fields) {
@@ -18,11 +18,16 @@ export function getTempoTraceFromLinks(fields: FieldDef[]) {
 }
 
 function getTempoTraceFromLink(link: LinkModel) {
-  const queryData = getDataSourceAndQueryFromLink(link);
-  if (!queryData || queryData.queryType !== 'traceql') {
-    return null;
+  if (link.interpolatedParams?.query && isTempoQuery(link.interpolatedParams.query)) {
+    const query = link.interpolatedParams.query;
+    return {
+      dsUID: query.datasource?.uid || '',
+      query: query.query,
+      queryType: query.queryType || '',
+    };
+  } else {
+    return undefined;
   }
-  return queryData;
 }
 
 export type EmbeddedInternalLink = {
@@ -31,31 +36,21 @@ export type EmbeddedInternalLink = {
   queryType: string;
 };
 
-function getDataSourceAndQueryFromLink(link: LinkModel): EmbeddedInternalLink | null {
-  if (!link.href) {
-    return null;
-  }
-  const paramsStrings = link.href.split('?')[1];
-  if (!paramsStrings) {
-    return null;
-  }
-  const params = Object.values(Object.fromEntries(new URLSearchParams(paramsStrings)));
-  try {
-    const parsed = JSON.parse(params[0]);
-    const dsUID: string = 'datasource' in parsed && parsed.datasource ? parsed.datasource.toString() : '';
-    const query: string =
-      'queries' in parsed && Array.isArray(parsed.queries) && 'query' in parsed.queries[0] && parsed.queries[0].query
-        ? parsed.queries[0].query.toString()
-        : '';
-    const queryType =
-      'queryType' in parsed.queries[0] && parsed.queries[0].queryType ? parsed.queries[0].queryType.toString() : '';
-    return dsUID && query && queryType
-      ? {
-          dsUID,
-          query,
-          queryType,
-        }
-      : null;
-  } catch (e) {}
-  return null;
+// Matches a TraceQL trace-id lookup, e.g. `{ trace:id = "abc" }`. The quote is back-referenced so both ends match.
+const TRACE_ID_QUERY_REGEX = /^\{\s*trace:id\s*=\s*(["`])([0-9A-Fa-f]+)\1\s*\}$/;
+
+export function getTraceIdFromTraceQlQuery(query: string): string | undefined {
+  return query.trim().match(TRACE_ID_QUERY_REGEX)?.[2];
 }
+
+type TempoQuery = {
+  query: string;
+  queryType: string;
+};
+
+const isTempoQuery = (query: unknown): query is TempoQuery => {
+  if (!query || typeof query !== 'object') {
+    return false;
+  }
+  return 'query' in query && 'queryType' in query;
+};

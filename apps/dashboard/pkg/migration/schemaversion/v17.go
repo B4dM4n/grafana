@@ -52,6 +52,20 @@ func V17(_ context.Context, dashboard map[string]interface{}) error {
 		}
 
 		migrateMinSpanToMaxPerRow(panel)
+
+		// Handle nested panels in collapsed rows
+		if !IsArray(panel["panels"]) {
+			continue
+		}
+		nestedPanels := panel["panels"].([]interface{})
+
+		for _, np := range nestedPanels {
+			nestedPanel, ok := np.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			migrateMinSpanToMaxPerRow(nestedPanel)
+		}
 	}
 
 	return nil
@@ -82,7 +96,8 @@ func migrateMinSpanToMaxPerRow(panel map[string]interface{}) {
 	max := gridColumnCount / minSpan
 	factors := getFactors(gridColumnCount)
 
-	// Find the first factor greater than max
+	// Find the first factor greater than max, then use the previous factor
+	// This matches the frontend logic: findIndex(factors, (o) => o > max) - 1
 	factorIndex := -1
 	for i, factor := range factors {
 		if float64(factor) > max {
@@ -91,16 +106,20 @@ func migrateMinSpanToMaxPerRow(panel map[string]interface{}) {
 		}
 	}
 
-	// Use the previous factor as maxPerRow
+	// Use the previous factor as maxPerRow (matching frontend logic exactly)
+	// The frontend code does: factors[findIndex(factors, (o) => o > max) - 1]
+	// When findIndex returns -1, this becomes factors[-2] which is undefined
+	// So we need to match this behavior
 	if factorIndex > 0 {
 		panel["maxPerRow"] = factors[factorIndex-1]
 	} else if factorIndex == 0 {
 		// If the first factor is already greater than max, use 1
 		panel["maxPerRow"] = 1
-	} else {
-		// If no factor is greater than max, use the largest factor
-		panel["maxPerRow"] = factors[len(factors)-1]
 	}
+	// If no factor is greater than max, don't set maxPerRow
+	// This matches frontend behavior when findIndex returns -1
+	// The frontend sets maxPerRow to undefined, which gets filtered out
+	// So we don't set it at all
 
 	// Remove the minSpan property
 	delete(panel, "minSpan")

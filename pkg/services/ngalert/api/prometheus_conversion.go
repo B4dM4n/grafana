@@ -5,7 +5,7 @@ import (
 	"io"
 	"mime"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/grafana/grafana/pkg/api/response"
 	"github.com/grafana/grafana/pkg/apimachinery/errutil"
@@ -141,4 +141,8 @@ func (f *ConvertPrometheusApiHandler) handleRouteConvertPrometheusGetAlertmanage
 
 func (f *ConvertPrometheusApiHandler) handleRouteConvertPrometheusDeleteAlertmanagerConfig(ctx *contextmodel.ReqContext) response.Response {
 	return f.svc.RouteConvertPrometheusDeleteAlertmanagerConfig(ctx)
+}
+
+func (f *ConvertPrometheusApiHandler) handleRouteConvertPrometheusPromoteAlertmanagerConfig(ctx *contextmodel.ReqContext, identifier string) response.Response {
+	return f.svc.RouteConvertPrometheusPromoteAlertmanagerConfig(ctx, identifier)
 }

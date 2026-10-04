@@ -1,26 +1,21 @@
 import { css, cx } from '@emotion/css';
-import {
-  autoUpdate,
-  flip,
-  safePolygon,
-  shift,
-  useDismiss,
-  useFloating,
-  useHover,
-  useInteractions,
-} from '@floating-ui/react';
+import { autoUpdate, safePolygon, useDismiss, useFloating, useHover, useInteractions } from '@floating-ui/react';
 import { useCallback, useEffect, useState } from 'react';
 import * as React from 'react';
 
-import { DataFrame, Field, formattedValueToString, GrafanaTheme2, LinkModel } from '@grafana/data';
+import { type DataFrame, type Field, formattedValueToString, type GrafanaTheme2, type LinkModel } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
-import { TimeZone } from '@grafana/schema';
-import { Portal, UPlotConfigBuilder, useStyles2 } from '@grafana/ui';
-import { VizTooltipItem } from '@grafana/ui/internal';
+import { type TimeZone } from '@grafana/schema';
+import {
+  floatingUtils,
+  Portal,
+  type UPlotConfigBuilder,
+  type VizTooltipItem,
+  getFieldDisplayLinks,
+  useStyles2,
+} from '@grafana/ui';
 import { CloseButton } from 'app/core/components/CloseButton/CloseButton';
 import { ExemplarTooltip } from 'app/features/visualization/data-hover/ExemplarTooltip';
-
-import { getDataLinks } from '../../status-history/utils';
 
 interface ExemplarMarkerProps {
   timeZone: TimeZone;
@@ -50,21 +45,14 @@ export const ExemplarMarker = ({
   const styles = useStyles2(getExemplarMarkerStyles, maxWidth);
   const [isOpen, setIsOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const placement = 'bottom';
 
   // the order of middleware is important!
-  const middleware = [
-    flip({
-      fallbackAxisSideDirection: 'end',
-      // see https://floating-ui.com/docs/flip#combining-with-shift
-      crossAxis: false,
-      boundary: document.body,
-    }),
-    shift(),
-  ];
+  const middleware = floatingUtils.getPositioningMiddleware(placement);
 
   const { context, refs, floatingStyles } = useFloating({
     open: isOpen,
-    placement: 'bottom',
+    placement,
     onOpenChange: setIsOpen,
     middleware,
     whileElementsMounted: autoUpdate,
@@ -145,7 +133,7 @@ export const ExemplarMarker = ({
     dataFrame.fields.forEach((field: Field) => {
       const value = field.values[rowIndex];
 
-      links.push(...getDataLinks(field, rowIndex));
+      links.push(...getFieldDisplayLinks(field, rowIndex));
 
       const fieldDisplay = field.display?.(value) ?? { text: `${value}`, numeric: +value };
 

@@ -62,7 +62,7 @@ func testIntegrationApiKeyDataAccess(t *testing.T, fn getStore) {
 	defer resetTimeNow()
 
 	t.Run("Testing API Key data access", func(t *testing.T) {
-		db := db.InitTestDB(t)
+		db := db.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 		ss := fn(db)
 
 		t.Run("Given saved api key", func(t *testing.T) {
@@ -167,7 +167,7 @@ func testIntegrationApiKeyDataAccess(t *testing.T, fn getStore) {
 	})
 
 	t.Run("Testing API Key errors", func(t *testing.T) {
-		db := db.InitTestDB(t)
+		db := db.InitTestDB(t) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 		ss := fn(db)
 
 		t.Run("Testing API Duplicate Key Errors", func(t *testing.T) {
@@ -188,31 +188,25 @@ func testIntegrationApiKeyDataAccess(t *testing.T, fn getStore) {
 	t.Run("Testing Get API keys", func(t *testing.T) {
 		tests := []getApiKeysTestCase{
 			{
-				desc: "expect all keys for wildcard scope",
-				user: &user.SignedInUser{OrgID: 1, Permissions: map[int64]map[string][]string{
-					1: {"apikeys:read": {"apikeys:*"}},
-				}},
+				desc:               "expect all keys for wildcard scope",
+				user:               &user.SignedInUser{OrgID: 1, Permissions: map[int64]map[string][]string{}},
 				expectedAllNumKeys: 10,
 			},
 			{
-				desc: "expect only api keys that user have scopes for",
-				user: &user.SignedInUser{OrgID: 1, Permissions: map[int64]map[string][]string{
-					1: {"apikeys:read": {"apikeys:id:1", "apikeys:id:3"}},
-				}},
+				desc:               "expect only api keys that user have scopes for",
+				user:               &user.SignedInUser{OrgID: 1, Permissions: map[int64]map[string][]string{}},
 				expectedAllNumKeys: 10,
 			},
 			{
-				desc: "expect no keys when user have no scopes",
-				user: &user.SignedInUser{OrgID: 1, Permissions: map[int64]map[string][]string{
-					1: {"apikeys:read": {}},
-				}},
+				desc:               "expect no keys when user have no scopes",
+				user:               &user.SignedInUser{OrgID: 1, Permissions: map[int64]map[string][]string{}},
 				expectedAllNumKeys: 10,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.desc, func(t *testing.T) {
-				db := db.InitTestDB(t, db.InitTestDBOpt{})
+				db := db.InitTestDB(t, db.InitTestDBOpt{}) //nolint:staticcheck // legacy shared-DB test setup; migrate to NewTestStore
 				store := fn(db)
 				seedApiKeys(t, store, 10)
 

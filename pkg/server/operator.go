@@ -1,16 +1,29 @@
 package server
 
 import (
+	"context"
+
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/grafana/grafana/pkg/services/apiserver/standalone"
 	"github.com/grafana/grafana/pkg/setting"
 	"github.com/urfave/cli/v2"
 )
 
+// OperatorDependencies contains all the dependencies that operators need
+type OperatorDependencies struct {
+	BuildInfo      standalone.BuildInfo
+	CLIContext     *cli.Context
+	Config         *setting.Cfg
+	Registerer     prometheus.Registerer
+	HealthNotifier *HealthNotifier
+}
+
 // Operator represents an app operator that is available in the Grafana binary
 type Operator struct {
 	Name        string
 	Description string
-	RunFunc     func(standalone.BuildInfo, *cli.Context, *setting.Cfg) error
+	RunFunc     func(ctx context.Context, deps OperatorDependencies) error
 }
 
 var operatorsRegistry []Operator

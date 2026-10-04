@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	jose "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"golang.org/x/oauth2"
 
 	"github.com/grafana/grafana/pkg/apimachinery/identity"
+	"github.com/grafana/grafana/pkg/infra/remotecache"
 	"github.com/grafana/grafana/pkg/login/social"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/services/org"
@@ -46,9 +48,9 @@ type OktaClaims struct {
 	Name              string `json:"name"`
 }
 
-func NewOktaProvider(info *social.OAuthInfo, cfg *setting.Cfg, orgRoleMapper *OrgRoleMapper, ssoSettings ssosettings.Service, features featuremgmt.FeatureToggles) *SocialOkta {
+func NewOktaProvider(info *social.OAuthInfo, cfg *setting.Cfg, orgRoleMapper *OrgRoleMapper, ssoSettings ssosettings.Service, features featuremgmt.FeatureToggles, cache remotecache.CacheStorage) *SocialOkta {
 	provider := &SocialOkta{
-		SocialBase: newSocialBase(social.OktaProviderName, orgRoleMapper, info, features, cfg),
+		SocialBase: newSocialBaseWithCache(social.OktaProviderName, orgRoleMapper, info, features, cfg, cache),
 	}
 
 	if info.UseRefreshToken {
@@ -76,10 +78,16 @@ func (s *SocialOkta) Validate(ctx context.Context, newSettings ssoModels.SSOSett
 		return err
 	}
 
-	return validation.Validate(info, requester,
+	err = validation.Validate(info, requester,
 		validation.RequiredUrlValidator(info.AuthUrl, "Auth URL"),
 		validation.RequiredUrlValidator(info.TokenUrl, "Token URL"),
-		validation.RequiredUrlValidator(info.ApiUrl, "API URL"))
+		validation.RequiredUrlValidator(info.ApiUrl, "API URL"),
+		validation.ValidateIDTokenValidator)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *SocialOkta) Reload(ctx context.Context, settings ssoModels.SSOSettings) error {
@@ -108,6 +116,7 @@ func (claims *OktaClaims) extractEmail() string {
 }
 
 func (s *SocialOkta) UserInfo(ctx context.Context, client *http.Client, token *oauth2.Token) (*social.BasicUserInfo, error) {
+	logger := s.log.FromContext(ctx)
 	s.reloadMutex.RLock()
 	defer s.reloadMutex.RUnlock()
 
@@ -116,14 +125,35 @@ func (s *SocialOkta) UserInfo(ctx context.Context, client *http.Client, token *o
 		return nil, fmt.Errorf("no id_token found")
 	}
 
-	parsedToken, err := jwt.ParseSigned(idToken.(string))
-	if err != nil {
-		return nil, fmt.Errorf("error parsing id token: %w", err)
+	idTokenString, ok := idToken.(string)
+	if !ok {
+		return nil, fmt.Errorf("id_token is not a string")
 	}
 
 	var claims OktaClaims
-	if err := parsedToken.UnsafeClaimsWithoutVerification(&claims); err != nil {
-		return nil, fmt.Errorf("error getting claims from id token: %w", err)
+	var err error
+
+	// If JWT validation is enabled, validate the signature
+	if s.info.ValidateIDToken && s.info.JwkSetURL != "" {
+		rawJSON, err := s.validateIDTokenSignature(ctx, http.DefaultClient, idTokenString, s.info.JwkSetURL)
+		if err != nil {
+			return nil, fmt.Errorf("error validating id token signature: %w", err)
+		}
+
+		if err := json.Unmarshal(rawJSON, &claims); err != nil {
+			return nil, fmt.Errorf("error unmarshalling verified claims: %w", err)
+		}
+	} else {
+		// Otherwise, parse without signature validation (existing behavior)
+		parsedToken, parseErr := jwt.ParseSigned(idTokenString, []jose.SignatureAlgorithm{jose.HS256,
+			jose.HS384, jose.HS512, jose.RS256, jose.RS384, jose.RS512, jose.ES256, jose.ES384, jose.ES512})
+		if parseErr != nil {
+			return nil, fmt.Errorf("error parsing id token: %w", parseErr)
+		}
+
+		if err = parsedToken.UnsafeClaimsWithoutVerification(&claims); err != nil {
+			return nil, fmt.Errorf("error getting claims from id token: %w", err)
+		}
 	}
 
 	email := claims.extractEmail()
@@ -153,7 +183,7 @@ func (s *SocialOkta) UserInfo(ctx context.Context, client *http.Client, token *o
 	if !s.info.SkipOrgRoleSync {
 		directlyMappedRole, grafanaAdmin, err := s.extractRoleAndAdminOptional(data.rawJSON, groups)
 		if err != nil {
-			s.log.Warn("Failed to extract role", "err", err)
+			logger.Warn("Failed to extract role", "err", err)
 		}
 
 		if s.info.AllowAssignGrafanaAdmin {
@@ -162,11 +192,11 @@ func (s *SocialOkta) UserInfo(ctx context.Context, client *http.Client, token *o
 
 		externalOrgs, err := s.extractOrgs(data.rawJSON)
 		if err != nil {
-			s.log.Warn("Failed to extract orgs", "err", err)
+			logger.Warn("Failed to extract orgs", "err", err)
 			return nil, err
 		}
 
-		userInfo.OrgRoles = s.orgRoleMapper.MapOrgRoles(s.orgMappingCfg, externalOrgs, directlyMappedRole)
+		userInfo.OrgRoles = s.orgRoleMapper.MapOrgRoles(ctx, s.orgMappingCfg, externalOrgs, directlyMappedRole)
 
 		externalOrgRoles, err := s.extractOrgRoless(data.rawJSON)
 		if err != nil {
@@ -192,28 +222,29 @@ func (s *SocialOkta) UserInfo(ctx context.Context, client *http.Client, token *o
 	}
 
 	if s.info.AllowAssignGrafanaAdmin && s.info.SkipOrgRoleSync {
-		s.log.Debug("AllowAssignGrafanaAdmin and skipOrgRoleSync are both set, Grafana Admin role will not be synced, consider setting one or the other")
+		logger.Debug("AllowAssignGrafanaAdmin and skipOrgRoleSync are both set, Grafana Admin role will not be synced, consider setting one or the other")
 	}
 
 	return userInfo, nil
 }
 
 func (s *SocialOkta) extractAPI(ctx context.Context, data *OktaUserInfoJson, client *http.Client) error {
+	logger := s.log.FromContext(ctx)
 	rawUserInfoResponse, err := s.httpGet(ctx, client, s.info.ApiUrl)
 	if err != nil {
-		s.log.Debug("Error getting user info response", "url", s.info.ApiUrl, "error", err)
+		logger.Debug("Error getting user info response", "url", s.info.ApiUrl, "error", err)
 		return fmt.Errorf("error getting user info response: %w", err)
 	}
 	data.rawJSON = rawUserInfoResponse.Body
 
 	err = json.Unmarshal(data.rawJSON, data)
 	if err != nil {
-		s.log.Debug("Error decoding user info response", "raw_json", data.rawJSON, "error", err)
+		logger.Debug("Error decoding user info response", "raw_json", data.rawJSON, "error", err)
 		data.rawJSON = []byte{}
 		return fmt.Errorf("error decoding user info response: %w", err)
 	}
 
-	s.log.Debug("Received user info response", "raw_json", string(data.rawJSON), "data", data)
+	logger.Debug("Received user info response", "raw_json", string(data.rawJSON), "data", data)
 	return nil
 }
 
@@ -223,21 +254,4 @@ func (s *SocialOkta) getGroups(data *OktaUserInfoJson) []string {
 		groups = data.Groups
 	}
 	return groups
-}
-
-// TODO: remove this in a separate PR and use the isGroupMember from the social.go
-func (s *SocialOkta) isGroupMember(groups []string) bool {
-	if len(s.info.AllowedGroups) == 0 {
-		return true
-	}
-
-	for _, allowedGroup := range s.info.AllowedGroups {
-		for _, group := range groups {
-			if group == allowedGroup {
-				return true
-			}
-		}
-	}
-
-	return false
 }
