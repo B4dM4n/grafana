@@ -341,6 +341,8 @@ func NewDatasourceControlSourceRef() *DatasourceControlSourceRef {
 type DataTransformerConfig struct {
 	// Unique identifier of transformer
 	Id string `json:"id"`
+	// Unique identifier of the instance of the transformer
+	RefId *string `json:"refId,omitempty"`
 	// Disabled transformations are skipped
 	Disabled *bool `json:"disabled,omitempty"`
 	// Optional frame matcher. When missing it will be applied to all results
@@ -678,27 +680,27 @@ func NewFieldColor() *FieldColor {
 type FieldColorModeId string
 
 const (
-	FieldColorModeIdThresholds           FieldColorModeId = "thresholds"
-	FieldColorModeIdPaletteClassic       FieldColorModeId = "palette-classic"
-	FieldColorModeIdPaletteClassicByName FieldColorModeId = "palette-classic-by-name"
+	FieldColorModeIdThresholds            FieldColorModeId = "thresholds"
+	FieldColorModeIdPaletteClassic        FieldColorModeId = "palette-classic"
+	FieldColorModeIdPaletteClassicByName  FieldColorModeId = "palette-classic-by-name"
 	FieldColorModeIdPaletteClassicByLabel FieldColorModeId = "palette-classic-by-label"
-	FieldColorModeIdContinuousViridis    FieldColorModeId = "continuous-viridis"
-	FieldColorModeIdContinuousMagma      FieldColorModeId = "continuous-magma"
-	FieldColorModeIdContinuousPlasma     FieldColorModeId = "continuous-plasma"
-	FieldColorModeIdContinuousInferno    FieldColorModeId = "continuous-inferno"
-	FieldColorModeIdContinuousCividis    FieldColorModeId = "continuous-cividis"
-	FieldColorModeIdContinuousGrYlRd     FieldColorModeId = "continuous-GrYlRd"
-	FieldColorModeIdContinuousRdYlGr     FieldColorModeId = "continuous-RdYlGr"
-	FieldColorModeIdContinuousBlYlRd     FieldColorModeId = "continuous-BlYlRd"
-	FieldColorModeIdContinuousYlRd       FieldColorModeId = "continuous-YlRd"
-	FieldColorModeIdContinuousBlPu       FieldColorModeId = "continuous-BlPu"
-	FieldColorModeIdContinuousYlBl       FieldColorModeId = "continuous-YlBl"
-	FieldColorModeIdContinuousBlues      FieldColorModeId = "continuous-blues"
-	FieldColorModeIdContinuousReds       FieldColorModeId = "continuous-reds"
-	FieldColorModeIdContinuousGreens     FieldColorModeId = "continuous-greens"
-	FieldColorModeIdContinuousPurples    FieldColorModeId = "continuous-purples"
-	FieldColorModeIdFixed                FieldColorModeId = "fixed"
-	FieldColorModeIdShades               FieldColorModeId = "shades"
+	FieldColorModeIdContinuousViridis     FieldColorModeId = "continuous-viridis"
+	FieldColorModeIdContinuousMagma       FieldColorModeId = "continuous-magma"
+	FieldColorModeIdContinuousPlasma      FieldColorModeId = "continuous-plasma"
+	FieldColorModeIdContinuousInferno     FieldColorModeId = "continuous-inferno"
+	FieldColorModeIdContinuousCividis     FieldColorModeId = "continuous-cividis"
+	FieldColorModeIdContinuousGrYlRd      FieldColorModeId = "continuous-GrYlRd"
+	FieldColorModeIdContinuousRdYlGr      FieldColorModeId = "continuous-RdYlGr"
+	FieldColorModeIdContinuousBlYlRd      FieldColorModeId = "continuous-BlYlRd"
+	FieldColorModeIdContinuousYlRd        FieldColorModeId = "continuous-YlRd"
+	FieldColorModeIdContinuousBlPu        FieldColorModeId = "continuous-BlPu"
+	FieldColorModeIdContinuousYlBl        FieldColorModeId = "continuous-YlBl"
+	FieldColorModeIdContinuousBlues       FieldColorModeId = "continuous-blues"
+	FieldColorModeIdContinuousReds        FieldColorModeId = "continuous-reds"
+	FieldColorModeIdContinuousGreens      FieldColorModeId = "continuous-greens"
+	FieldColorModeIdContinuousPurples     FieldColorModeId = "continuous-purples"
+	FieldColorModeIdFixed                 FieldColorModeId = "fixed"
+	FieldColorModeIdShades                FieldColorModeId = "shades"
 )
 
 // Defines how to assign a series color from "by value" color schemes. For example for an aggregated data points like a timeseries, the color can be assigned by the min, max or last value.
