@@ -1,7 +1,7 @@
 import { find } from 'lodash';
 
 import { type AzureCredentials } from '@grafana/azure-sdk';
-import { type ScopedVars } from '@grafana/data';
+import { type ScopedVars, type TimeRange } from '@grafana/data';
 import { DataSourceWithBackend, getTemplateSrv, type TemplateSrv, type VariableInterpolation } from '@grafana/runtime';
 
 import { getCredentials } from '../credentials';
@@ -15,8 +15,8 @@ import {
   type AzureMonitorDataSourceJsonData,
   type AzureMonitorLocations,
   type AzureMonitorMetricsMetadataResponse,
-  type AzureMonitorProvidersResponse,
   type DatasourceValidationResult,
+  type GetDimensionValuesQuery,
   type GetLogAnalyticsTableResponse,
   type GetMetricMetadataQuery,
   type GetMetricNamespacesQuery,
@@ -46,12 +46,13 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
 > {
   private readonly credentials: AzureCredentials;
   apiVersion = '2018-01-01';
+  dimensionValuesApiVersion = '2021-05-01';
   apiPreviewVersion = '2017-12-01-preview';
   listByResourceGroupApiVersion = '2021-04-01';
-  providerApiVersion = '2021-04-01';
   locationsApiVersion = '2020-01-01';
   defaultSubscriptionId?: string;
   basicLogsEnabled?: boolean;
+  auxiliaryLogsEnabled?: boolean;
   batchAPIEnabled?: boolean;
   resourcePath: string;
   declare resourceGroup: string;
@@ -66,6 +67,7 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
 
     this.defaultSubscriptionId = instanceSettings.jsonData.subscriptionId;
     this.basicLogsEnabled = instanceSettings.jsonData.basicLogsEnabled;
+    this.auxiliaryLogsEnabled = instanceSettings.jsonData.auxiliaryLogsEnabled;
     // Gate on the feature flag so batchAPIEnabled is the single source of truth (callers needn't re-check it).
     // The flag proxy resolves against Grafana's provider, which is initialized before plugins load.
     this.batchAPIEnabled = instanceSettings.jsonData.batchAPIEnabled && isBatchAPIFlagEnabled();
@@ -246,7 +248,7 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
         );
       })
       .then((result) => {
-        if (url.toLowerCase().includes('microsoft.storage/storageaccounts')) {
+        if (!custom && url.toLowerCase().includes('microsoft.storage/storageaccounts')) {
           const storageNamespaces = [
             'microsoft.storage/storageaccounts',
             'microsoft.storage/storageaccounts/blobservices',
@@ -305,6 +307,23 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
     return this.getResource(url).then((result: AzureMonitorMetricsMetadataResponse) => {
       return ResponseParser.parseMetadata(result, this.templateSrv.replace(metricName));
     });
+  }
+
+  getDimensionValues(query: GetDimensionValuesQuery, range: TimeRange) {
+    const replacedQuery = this.replaceSingleTemplateVariables(query);
+    const url = UrlBuilder.buildAzureMonitorGetDimensionValuesUrl(
+      this.resourcePath,
+      this.dimensionValuesApiVersion,
+      replacedQuery,
+      range,
+      this.templateSrv
+    );
+    return this.getResource<AzureAPIResponse<Metric>>(url).then((result) =>
+      ResponseParser.parseMetadataDimensionValues(result, replacedQuery.dimension).map((value) => ({
+        text: value,
+        value,
+      }))
+    );
   }
 
   private validateDatasource(): DatasourceValidationResult | undefined {
@@ -370,12 +389,6 @@ export default class AzureMonitorDatasource extends DataSourceWithBackend<
     // { resourceGroup: ['rg1', 'rg2'], resourceName: ['res2'] } would result in
     // { resourceGroup: 'rg1', resourceName: 'res2' } which is not.
     return replaceTemplateVariables(this.templateSrv, query, scopedVars)[0];
-  }
-
-  async getProvider(providerName: string) {
-    return await this.getResource<AzureMonitorProvidersResponse>(
-      `${routeNames.azureMonitor}/providers/${providerName}?api-version=${this.providerApiVersion}`
-    );
   }
 
   async getLocations(subscriptions: string[]) {
